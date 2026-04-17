@@ -28,12 +28,15 @@
 (define-read-only (get-last-play (player principal))
   (default-to u0 (map-get? last-play-block player)))
 
-;; Pseudo-random card draw (1-3) seeded by block VRF + salt.
-;; Not cryptographically secure; sufficient for a demo.
+;; Pseudo-random card draw (1-3) seeded by block VRF bytes + salt.
+;; Uses element-at? to extract (buff 1) values, avoiding buff-to-uint-le type constraints.
 (define-read-only (pseudo-random-card (salt uint))
   (let (
     (vrf (unwrap-panic (get-block-info? vrf-seed (- block-height u1))))
-    (mixed (xor (buff-to-uint-le (unwrap-panic (slice? vrf u0 u16))) salt))
+    (b0 (buff-to-uint-le (unwrap-panic (element-at? vrf u0))))
+    (b1 (buff-to-uint-le (unwrap-panic (element-at? vrf u1))))
+    (b2 (buff-to-uint-le (unwrap-panic (element-at? vrf u2))))
+    (mixed (xor (+ (* b0 u65536) (* b1 u256) b2) salt))
   )
   (+ u1 (mod mixed u3))))
 
