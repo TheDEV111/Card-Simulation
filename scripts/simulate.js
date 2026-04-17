@@ -37,7 +37,9 @@ if (!SPONSOR_KEY) {
 
 // --- SETTINGS ---
 const TOTAL_TX = 50;
-const DELAY_MS = 500;
+const DELAY_MS = 800;
+const BATCH_SIZE = 24;         // Stacks mempool limit per address is 25 unconfirmed
+const BATCH_WAIT_MS = 65000;   // ~65s between batches — lets earlier TXs clear the mempool
 // Fixed small stake — contract still requires MIN_STAKE of 1000 µSTX
 // but sponsor covers fees; player wallets need 0 STX
 const FIXED_STAKE = 1000; // 0.001 STX
@@ -53,10 +55,20 @@ function sleep(ms) {
 }
 
 async function fetchNonce(address) {
-  const res = await fetch(`https://api.hiro.so/v2/accounts/${address}?proof=0`);
+  const res = await fetch(`https://api.hiro.so/v2/accounts/${address}?proof=0&unanchored=true`);
   if (!res.ok) throw new Error(`Failed to fetch nonce for ${address}: ${res.status}`);
   const data = await res.json();
   return data.nonce;
+}
+
+async function retry(fn, retries = 3, delayMs = 5000) {
+  for (let i = 0; i < retries; i++) {
+    try { return await fn(); }
+    catch (err) {
+      if (i < retries - 1) await sleep(delayMs);
+      else throw err;
+    }
+  }
 }
 
 // --- TRANSACTION ---
@@ -88,7 +100,7 @@ async function sendTransaction(playerKey, playerNonce, sponsorNonce, index) {
       sponsorNonce,
     });
 
-    const res = await broadcastTransaction(sponsored, network);
+    const res = await retry(() => broadcastTransaction(sponsored, network));
 
     if (res.error) {
       console.error(`[${index + 1}/50] ✗ card=${card} | ${res.reason ?? res.error}`);
@@ -127,6 +139,14 @@ async function run() {
   let sent = 0, errors = 0;
 
   for (let i = 0; i < TOTAL_TX; i++) {
+    // Pause between batches to let mempool drain (avoids TooMuchChaining)
+    if (i > 0 && i % BATCH_SIZE === 0) {
+      console.log(`\n⏳ Batch complete — waiting ${BATCH_WAIT_MS / 1000}s for mempool to clear...\n`);
+      await sleep(BATCH_WAIT_MS);
+      // Refresh sponsor nonce after wait — confirmed TXs free up slots
+      sponsorNonce = await fetchNonce(sponsorAddress);
+    }
+
     const playerKey = PRIVATE_KEYS[i % PRIVATE_KEYS.length];
     const result = await sendTransaction(playerKey, playerNonces[playerKey]++, sponsorNonce++, i);
     if (result === "sent") sent++; else errors++;
