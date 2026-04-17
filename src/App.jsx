@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { openContractCall } from "@stacks/connect";
-import { StacksTestnet } from "@stacks/network";
+import { StacksMainnet } from "@stacks/network";
 import { uintCV, PostConditionMode } from "@stacks/transactions";
 
 import WalletConnect from "./components/WalletConnect";
@@ -12,7 +12,7 @@ const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS ?? "ST1PQHQKV0RJX
 const CONTRACT_NAME = "card-game";
 const MIN_STAKE = 1000;
 const MAX_STAKE = 1_000_000;
-const NETWORK = new StacksTestnet();
+const NETWORK = new StacksMainnet();
 
 export default function App() {
   const [address, setAddress] = useState(null);

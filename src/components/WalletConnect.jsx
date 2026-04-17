@@ -1,5 +1,5 @@
 import { showConnect, AppConfig, UserSession } from "@stacks/connect";
-import { StacksTestnet } from "@stacks/network";
+import { StacksMainnet } from "@stacks/network";
 
 const APP_DETAILS = {
   name: "Stacks Card Game",
@@ -23,7 +23,7 @@ export default function WalletConnect({ address, onConnect, onDisconnect }) {
   function handleConnect() {
     showConnect({
       appDetails: APP_DETAILS,
-      network: new StacksTestnet(),
+      network: new StacksMainnet(),
       userSession: getSafeSession(),
       onFinish: ({ userSession: session }) => {
         const profile = session.loadUserData();
