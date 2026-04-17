@@ -8,25 +8,15 @@
 (define-constant ERR_INVALID_CARD (err u100))
 (define-constant ERR_STAKE_TOO_LOW (err u101))
 (define-constant ERR_STAKE_TOO_HIGH (err u102))
-(define-constant ERR_COOLDOWN_ACTIVE (err u103))
 (define-constant ERR_INSUFFICIENT_BALANCE (err u104))
 
 (define-constant MIN_STAKE u1000)
 (define-constant MAX_STAKE u1000000)
-;; Minimum blocks between plays per address (anti-spam)
-(define-constant COOLDOWN_BLOCKS u2)
-
-;; --- storage ---
-
-(define-map last-play-block principal uint)
 
 ;; --- read-only helpers ---
 
 (define-read-only (get-balance)
   (stx-get-balance (as-contract tx-sender)))
-
-(define-read-only (get-last-play (player principal))
-  (default-to u0 (map-get? last-play-block player)))
 
 ;; Pseudo-random card draw (1-3) seeded by block VRF bytes + salt.
 ;; Uses element-at? to extract (buff 1) values, avoiding buff-to-uint-le type constraints.
@@ -45,7 +35,6 @@
 (define-public (play (card uint) (stake uint))
   (let (
     (player tx-sender)
-    (last-block (get-last-play player))
     (contract-card (pseudo-random-card (+ stake card)))
     (is-win (is-eq card contract-card))
     (payout (* stake u2))
@@ -55,17 +44,9 @@
     ;; validate stake
     (asserts! (>= stake MIN_STAKE) ERR_STAKE_TOO_LOW)
     (asserts! (<= stake MAX_STAKE) ERR_STAKE_TOO_HIGH)
-    ;; enforce cooldown
-    (asserts!
-      (or (is-eq last-block u0)
-          (>= block-height (+ last-block COOLDOWN_BLOCKS)))
-      ERR_COOLDOWN_ACTIVE)
 
     ;; accept stake from player
     (try! (stx-transfer? stake player (as-contract tx-sender)))
-
-    ;; record play block
-    (map-set last-play-block player block-height)
 
     ;; pay out or retain
     (if is-win

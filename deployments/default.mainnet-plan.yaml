@@ -9,9 +9,9 @@ plan:
     - id: 0
       transactions:
         - contract-publish:
-            contract-name: card-game
+            contract-name: card-game-v2
             expected-sender: SPQG93AEB9GACWCPZ92Z6FB440HX1CNP4ADT8S0X
-            cost: 29160
+            cost: 23290
             path: contracts/card-game.clar
             anchor-block-only: true
             clarity-version: 2

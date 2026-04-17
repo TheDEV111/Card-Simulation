@@ -5,7 +5,7 @@ authors = ["SPQG93AEB9GACWCPZ92Z6FB440HX1CNP4ADT8S0X"]
 telemetry = false
 cache_dir = "./.clarinet"
 
-[contracts.card-game]
+[contracts.card-game-v2]
 path = "contracts/card-game.clar"
 clarity_version = 2
 epoch = "3.0"

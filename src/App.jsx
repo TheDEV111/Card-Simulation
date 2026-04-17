@@ -9,7 +9,7 @@ import StakeInput from "./components/StakeInput";
 import GameResult from "./components/GameResult";
 
 const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS ?? "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM";
-const CONTRACT_NAME = "card-game";
+const CONTRACT_NAME = "card-game-v2";
 const MIN_STAKE = 1000;
 const MAX_STAKE = 1_000_000;
 const NETWORK = new StacksMainnet();
