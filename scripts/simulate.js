@@ -1,6 +1,10 @@
+import { setDefaultResultOrder } from "dns";
+setDefaultResultOrder("ipv4first");
+
 import {
   makeContractCall,
   broadcastTransaction,
+  sponsorTransaction,
   AnchorMode,
   uintCV,
   PostConditionMode,
@@ -16,26 +20,32 @@ const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS ?? "SPQG93AEB9GACWCPZ92Z6F
 const CONTRACT_NAME = "card-game-v2";
 const FUNCTION_NAME = "play";
 
+// Player wallets — need zero STX (fees covered by sponsor)
 const PRIVATE_KEYS = (process.env.PRIVATE_KEYS ?? "").split(",").filter(Boolean);
 
+// Sponsor wallet — pays all TX fees (the deployer wallet)
+const SPONSOR_KEY = process.env.SPONSOR_KEY ?? "";
+
 if (PRIVATE_KEYS.length === 0) {
-  console.error("Set PRIVATE_KEYS env var: comma-separated mainnet private keys.");
+  console.error("Set PRIVATE_KEYS env var: comma-separated player private keys.");
+  process.exit(1);
+}
+if (!SPONSOR_KEY) {
+  console.error("Set SPONSOR_KEY env var: private key of the fee-paying sponsor wallet.");
   process.exit(1);
 }
 
 // --- SETTINGS ---
 const TOTAL_TX = 50;
-// Nonces are tracked locally so we don't wait for confirms between sends
 const DELAY_MS = 500;
+// Fixed small stake — contract still requires MIN_STAKE of 1000 µSTX
+// but sponsor covers fees; player wallets need 0 STX
+const FIXED_STAKE = 1000; // 0.001 STX
 
 // --- HELPERS ---
 
 function getRandomCard() {
   return Math.floor(Math.random() * 3) + 1;
-}
-
-function getRandomStake() {
-  return Math.floor(Math.random() * 999_001) + 1_000;
 }
 
 function sleep(ms) {
@@ -51,32 +61,41 @@ async function fetchNonce(address) {
 
 // --- TRANSACTION ---
 
-async function sendTransaction(privateKey, nonce, index) {
+async function sendTransaction(playerKey, playerNonce, sponsorNonce, index) {
   const card = getRandomCard();
-  const stake = getRandomStake();
 
   try {
+    // Player signs with sponsored:true — no fee required from player
     const tx = await makeContractCall({
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
       functionName: FUNCTION_NAME,
-      functionArgs: [uintCV(card), uintCV(stake)],
-      senderKey: privateKey,
+      functionArgs: [uintCV(card), uintCV(FIXED_STAKE)],
+      senderKey: playerKey,
       network,
       anchorMode: AnchorMode.Any,
       postConditionMode: PostConditionMode.Allow,
-      nonce,
-      fee: 2000n,
+      nonce: playerNonce,
+      fee: 0,
+      sponsored: true,
     });
 
-    const res = await broadcastTransaction({ transaction: tx, network });
+    // Sponsor signs and sets the actual fee
+    const sponsored = await sponsorTransaction({
+      transaction: tx,
+      sponsorPrivateKey: SPONSOR_KEY,
+      fee: 2000,
+      sponsorNonce,
+    });
+
+    const res = await broadcastTransaction(sponsored, network);
 
     if (res.error) {
-      console.error(`[${index + 1}/50] ✗ card=${card} stake=${(stake / 1e6).toFixed(4)} STX | ${res.reason ?? res.error}`);
+      console.error(`[${index + 1}/50] ✗ card=${card} | ${res.reason ?? res.error}`);
       return "error";
     }
 
-    console.log(`[${index + 1}/50] ✓ card=${card} stake=${(stake / 1e6).toFixed(4)} STX | ${res.txid}`);
+    console.log(`[${index + 1}/50] ✓ card=${card} stake=0.001 STX | ${res.txid}`);
     return "sent";
   } catch (err) {
     console.error(`[${index + 1}/50] ✗ ${err.message}`);
@@ -87,24 +106,29 @@ async function sendTransaction(privateKey, nonce, index) {
 // --- RUN ---
 
 async function run() {
-  console.log(`\nTarget: ${CONTRACT_ADDRESS}.${CONTRACT_NAME}`);
-  console.log(`Keys:   ${PRIVATE_KEYS.length}`);
-  console.log(`TXs:    ${TOTAL_TX}\n`);
+  const sponsorAddress = getAddressFromPrivateKey(SPONSOR_KEY, TransactionVersion.Mainnet);
 
-  // Fetch starting nonce per key so consecutive TXs from the same key don't collide
-  const nonces = {};
+  console.log(`\nTarget:  ${CONTRACT_ADDRESS}.${CONTRACT_NAME}`);
+  console.log(`Players: ${PRIVATE_KEYS.length} wallets (zero STX needed)`);
+  console.log(`Sponsor: ${sponsorAddress} (pays all fees)`);
+  console.log(`TXs:     ${TOTAL_TX}\n`);
+
+  // Fetch nonces for all players and sponsor
+  const playerNonces = {};
   for (const key of PRIVATE_KEYS) {
     const address = getAddressFromPrivateKey(key, TransactionVersion.Mainnet);
-    nonces[key] = await fetchNonce(address);
-    console.log(`  ${address} — nonce: ${nonces[key]}`);
+    playerNonces[key] = await fetchNonce(address);
+    console.log(`  Player ${address} — nonce: ${playerNonces[key]}`);
   }
-  console.log();
+
+  let sponsorNonce = await fetchNonce(sponsorAddress);
+  console.log(`  Sponsor ${sponsorAddress} — nonce: ${sponsorNonce}\n`);
 
   let sent = 0, errors = 0;
 
   for (let i = 0; i < TOTAL_TX; i++) {
-    const key = PRIVATE_KEYS[i % PRIVATE_KEYS.length];
-    const result = await sendTransaction(key, nonces[key]++, i);
+    const playerKey = PRIVATE_KEYS[i % PRIVATE_KEYS.length];
+    const result = await sendTransaction(playerKey, playerNonces[playerKey]++, sponsorNonce++, i);
     if (result === "sent") sent++; else errors++;
     if (i < TOTAL_TX - 1) await sleep(DELAY_MS);
   }
@@ -112,6 +136,7 @@ async function run() {
   console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
   console.log(`✅ Sent:   ${sent}`);
   console.log(`✗  Errors: ${errors}`);
+  console.log(`Total fees: ~${(sent * 0.002).toFixed(3)} STX (paid by sponsor)`);
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
 }
 
