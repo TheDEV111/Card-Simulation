@@ -2,7 +2,7 @@
 
 A single-page web app where players stake STX and pick a card. A Clarity smart contract determines the outcome pseudo-randomly. Winners receive 2× their stake; losers forfeit to the contract.
 
-**Live contract:** [`SP24BDDZQHPNM6CMH2NVXSGZHD1M0S3ZE1NSQ68EX.card-game`](https://explorer.hiro.so/txid/939026d44e8e8913dce31a099aa099b2e4184c2d766f77aad7667418c1ea405a?chain=mainnet)
+**Live contract:** [`SPQG93AEB9GACWCPZ92Z6FB440HX1CNP4ADT8S0X.card-game`](https://explorer.hiro.so/txid/939026d44e8e8913dce31a099aa099b2e4184c2d766f77aad7667418c1ea405a?chain=mainnet)
 
 ---
 
@@ -67,7 +67,7 @@ Sends 50 transactions against the deployed contract for load testing.
 ```bash
 cd scripts
 npm install
-CONTRACT_ADDRESS=SP24BDDZQHPNM6CMH2NVXSGZHD1M0S3ZE1NSQ68EX \
+CONTRACT_ADDRESS=SPQG93AEB9GACWCPZ92Z6FB440HX1CNP4ADT8S0X \
 PRIVATE_KEYS=key1,key2 \
 node simulate.js
 ```
