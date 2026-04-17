@@ -1,4 +1,4 @@
-import { showConnect } from "@stacks/connect";
+import { showConnect, AppConfig, UserSession } from "@stacks/connect";
 import { StacksTestnet } from "@stacks/network";
 
 const APP_DETAILS = {
@@ -6,13 +6,27 @@ const APP_DETAILS = {
   icon: window.location.origin + "/favicon.ico",
 };
 
+const appConfig = new AppConfig(["store_write", "publish_data"]);
+const userSession = new UserSession({ appConfig });
+
+function getSafeSession() {
+  try {
+    userSession.isUserSignedIn();
+  } catch {
+    // Stale or malformed session data — clear it so the modal can proceed
+    userSession.store.deleteSessionData();
+  }
+  return userSession;
+}
+
 export default function WalletConnect({ address, onConnect, onDisconnect }) {
   function handleConnect() {
     showConnect({
       appDetails: APP_DETAILS,
       network: new StacksTestnet(),
-      onFinish: ({ userSession }) => {
-        const profile = userSession.loadUserData();
+      userSession: getSafeSession(),
+      onFinish: ({ userSession: session }) => {
+        const profile = session.loadUserData();
         onConnect(profile.profile.stxAddress.testnet);
       },
       onCancel: () => {},

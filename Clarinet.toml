@@ -1,0 +1,11 @@
+[project]
+name = "card-game"
+description = "Stacks Card Game"
+authors = ["SP24BDDZQHPNM6CMH2NVXSGZHD1M0S3ZE1NSQ68EX"]
+telemetry = false
+cache_dir = "./.clarinet"
+
+[contracts.card-game]
+path = "contracts/card-game.clar"
+clarity_version = 2
+epoch = "3.0"

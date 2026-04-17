@@ -1,0 +1,18 @@
+---
+id: 0
+name: Mainnet deployment
+network: mainnet
+stacks-node: "https://api.hiro.so"
+bitcoin-node: "http://blockstack:blockstacksystem@bitcoin.blockstack.com:8332"
+plan:
+  batches:
+    - id: 0
+      transactions:
+        - contract-publish:
+            contract-name: card-game
+            expected-sender: SP24BDDZQHPNM6CMH2NVXSGZHD1M0S3ZE1NSQ68EX
+            cost: 27060
+            path: contracts/card-game.clar
+            anchor-block-only: true
+            clarity-version: 2
+      epoch: "3.0"

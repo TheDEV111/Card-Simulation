@@ -6,6 +6,11 @@ node_modules/
 .env.local
 .env.*.local
 
+# Clarinet — contains seed phrases, never commit
+settings/Mainnet.toml
+settings/Testnet.toml
+.clarinet/
+
 # build output
 dist/
 dist-ssr/
