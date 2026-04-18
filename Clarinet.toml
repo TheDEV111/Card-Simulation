@@ -9,3 +9,8 @@ cache_dir = "./.clarinet"
 path = "contracts/card-game.clar"
 clarity_version = 2
 epoch = "3.0"
+
+[contracts.stx-bouncer]
+path = "contracts/stx-bouncer.clar"
+clarity_version = 2
+epoch = "3.0"

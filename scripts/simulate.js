@@ -5,6 +5,7 @@ import {
   makeContractCall,
   broadcastTransaction,
   AnchorMode,
+  standardPrincipalCV,
   uintCV,
   PostConditionMode,
   getAddressFromPrivateKey,
@@ -16,7 +17,7 @@ import { StacksMainnet } from "@stacks/network";
 const network = new StacksMainnet();
 
 const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS ?? "SPQG93AEB9GACWCPZ92Z6FB440HX1CNP4ADT8S0X";
-const CONTRACT_NAME = "card-game-v2";
+const CONTRACT_NAME    = "stx-bouncer";
 
 const PRIVATE_KEYS = (process.env.PRIVATE_KEYS ?? "").split(",").filter(Boolean);
 
@@ -26,18 +27,15 @@ if (PRIVATE_KEYS.length === 0) {
 }
 
 // --- SETTINGS ---
-// Each wallet needs ~0.5 STX: (TOTAL_TX / keys) × (0.002 fee + 0.001 stake)
-const TOTAL_TX       = 200;
-const BATCH_SIZE     = 24;       // max safe unconfirmed per address
-const BLOCK_WAIT_MS  = 660_000;  // 11 min — wait for block confirmation between batches
-const TX_DELAY_MS    = 300;      // ms between individual sends within a batch
-const FIXED_STAKE    = 1000;     // 0.001 STX
+// Each wallet needs ~0.1 STX for fees (200 TXs / wallets × 0.002 STX fee)
+// Contract needs pre-funding: TOTAL_TX × 3000 µSTX for drip calls
+const TOTAL_TX      = 200;
+const BATCH_SIZE    = 24;        // max safe unconfirmed per address
+const BLOCK_WAIT_MS = 660_000;   // 11 min — wait for block confirmation between batches
+const TX_DELAY_MS   = 300;       // ms between individual sends within a batch
+const TIP_AMOUNT    = 1000;      // 0.001 STX tipped per tip() call
 
 // --- HELPERS ---
-
-function getRandomCard() {
-  return Math.floor(Math.random() * 3) + 1;
-}
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -68,34 +66,56 @@ async function broadcast(tx) {
   throw new Error("broadcast failed after retries");
 }
 
-// Send one TX from a wallet, returns { ok, nonceConsumed }
-async function sendOne(key, nonce, label) {
-  const card = getRandomCard();
+// Alternates between drip() and tip() to create varied on-chain activity
+// drip: contract pays caller 3000 µSTX (net +1000 µSTX after fee)
+// tip:  caller sends 1000 µSTX through contract to next wallet
+async function sendOne(key, nonce, label, txIndex, addresses, walletIndex) {
+  const useDrip = txIndex % 2 === 0;
+
   try {
-    const tx = await makeContractCall({
-      contractAddress: CONTRACT_ADDRESS,
-      contractName: CONTRACT_NAME,
-      functionName: "play",
-      functionArgs: [uintCV(card), uintCV(FIXED_STAKE)],
-      senderKey: key,
-      network,
-      anchorMode: AnchorMode.Any,
-      postConditionMode: PostConditionMode.Allow,
-      nonce,
-      fee: 2000,
-    });
+    let tx;
+
+    if (useDrip) {
+      tx = await makeContractCall({
+        contractAddress: CONTRACT_ADDRESS,
+        contractName: CONTRACT_NAME,
+        functionName: "drip",
+        functionArgs: [],
+        senderKey: key,
+        network,
+        anchorMode: AnchorMode.Any,
+        postConditionMode: PostConditionMode.Allow,
+        nonce,
+        fee: 2000,
+      });
+    } else {
+      // tip to the next wallet (round-robin)
+      const recipient = addresses[(walletIndex + 1) % addresses.length];
+      tx = await makeContractCall({
+        contractAddress: CONTRACT_ADDRESS,
+        contractName: CONTRACT_NAME,
+        functionName: "tip",
+        functionArgs: [standardPrincipalCV(recipient), uintCV(TIP_AMOUNT)],
+        senderKey: key,
+        network,
+        anchorMode: AnchorMode.Any,
+        postConditionMode: PostConditionMode.Allow,
+        nonce,
+        fee: 2000,
+      });
+    }
 
     const res = await broadcast(tx);
 
     if (res.error) {
       const reason = res.reason ?? res.error;
-      console.log(`  ${label} ✗ card=${card} | ${reason}`);
+      console.log(`  ${label} ✗ ${useDrip ? "drip" : "tip"} | ${reason}`);
       const isConflict = reason === "ConflictingNonceInMempool";
       const isBad      = reason === "BadNonce";
       return { ok: false, isConflict, isBad };
     }
 
-    console.log(`  ${label} ✓ card=${card} | ${res.txid.slice(0, 16)}…`);
+    console.log(`  ${label} ✓ ${useDrip ? "drip" : "tip"} | ${res.txid.slice(0, 16)}…`);
     return { ok: true };
   } catch (err) {
     console.log(`  ${label} ✗ ${err.message}`);
@@ -104,13 +124,14 @@ async function sendOne(key, nonce, label) {
 }
 
 // Send a batch of up to BATCH_SIZE TXs from one wallet, returns number sent
-async function sendBatch(key, nonce, batchIndex, walletLabel) {
+async function sendBatch(key, nonce, batchIndex, walletLabel, walletIndex, addresses) {
   let sent = 0;
   let currentNonce = nonce;
 
   for (let i = 0; i < BATCH_SIZE; i++) {
+    const txIndex = batchIndex * BATCH_SIZE + i;
     const label = `[${walletLabel} batch=${batchIndex + 1} tx=${i + 1}/${BATCH_SIZE}]`;
-    const { ok, isConflict, isBad } = await sendOne(key, currentNonce, label);
+    const { ok, isConflict, isBad } = await sendOne(key, currentNonce, label, txIndex, addresses, walletIndex);
 
     if (ok) {
       sent++;
@@ -118,7 +139,6 @@ async function sendBatch(key, nonce, batchIndex, walletLabel) {
     } else if (isConflict) {
       currentNonce++; // skip stuck mempool slot
     } else if (isBad) {
-      // Nonce too low — re-fetch and continue
       const address = getAddressFromPrivateKey(key, TransactionVersion.Mainnet);
       currentNonce = await fetchNonce(address);
     }
@@ -141,6 +161,7 @@ async function run() {
   console.log(`Wallets: ${PRIVATE_KEYS.length}`);
   console.log(`Goal   : ${TOTAL_TX} TXs`);
   console.log(`Strategy: ${BATCH_SIZE} TXs/wallet/block, ~${Math.ceil(TOTAL_TX / (BATCH_SIZE * PRIVATE_KEYS.length))} rounds`);
+  console.log(`Note   : Contract must be pre-funded with >= ${TOTAL_TX * 3000} uSTX for drip calls`);
   console.log(`${"━".repeat(50)}\n`);
 
   // Fetch starting nonces
@@ -162,7 +183,7 @@ async function run() {
     // Send batches from all wallets in parallel
     const results = await Promise.all(
       PRIVATE_KEYS.map((key, i) =>
-        sendBatch(key, nonces[key], round, `W${i + 1}`)
+        sendBatch(key, nonces[key], round, `W${i + 1}`, i, addresses)
       )
     );
 
@@ -188,8 +209,8 @@ async function run() {
   }
 
   console.log(`\n${"━".repeat(50)}`);
-  console.log(`✅ Done — ${totalSent} transactions sent to ${CONTRACT_NAME}`);
-  console.log(`💸 Approx fees: ~${(totalSent * 0.002).toFixed(3)} STX`);
+  console.log(`Done -- ${totalSent} transactions sent to ${CONTRACT_NAME}`);
+  console.log(`Approx fees: ~${(totalSent * 0.002).toFixed(3)} STX`);
   console.log(`${"━".repeat(50)}\n`);
 }
 
