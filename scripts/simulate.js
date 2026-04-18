@@ -36,10 +36,10 @@ if (!SPONSOR_KEY) {
 }
 
 // --- SETTINGS ---
-const TOTAL_TX = 50;
+const TOTAL_TX = 25;
 const DELAY_MS = 800;
-const BATCH_SIZE = 24;         // Stacks mempool limit per address is 25 unconfirmed
-const BATCH_WAIT_MS = 65000;   // ~65s between batches — lets earlier TXs clear the mempool
+const BATCH_SIZE = 24;          // Stacks mempool limit per address is 25 unconfirmed
+const BATCH_WAIT_MS = 660000;   // 11 min between batches — waits for a full Stacks block to confirm
 // Fixed small stake — contract still requires MIN_STAKE of 1000 µSTX
 // but sponsor covers fees; player wallets need 0 STX
 const FIXED_STAKE = 1000; // 0.001 STX
@@ -54,11 +54,17 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchNonce(address) {
-  const res = await fetch(`https://api.hiro.so/v2/accounts/${address}?proof=0&unanchored=true`);
+async function fetchNonce(address, attempt = 0) {
+  const res = await fetch(`https://api.hiro.so/extended/v1/address/${address}/nonces`);
+  if (res.status === 429) {
+    const wait = 10000 * (attempt + 1);
+    console.log(`  Rate limited — waiting ${wait / 1000}s...`);
+    await sleep(wait);
+    return fetchNonce(address, attempt + 1);
+  }
   if (!res.ok) throw new Error(`Failed to fetch nonce for ${address}: ${res.status}`);
   const data = await res.json();
-  return data.nonce;
+  return data.possible_next_nonce;
 }
 
 async function retry(fn, retries = 3, delayMs = 5000) {
@@ -103,15 +109,19 @@ async function sendTransaction(playerKey, playerNonce, sponsorNonce, index) {
     const res = await retry(() => broadcastTransaction(sponsored, network));
 
     if (res.error) {
-      console.error(`[${index + 1}/50] ✗ card=${card} | ${res.reason ?? res.error}`);
-      return "error";
+      const reason = res.reason ?? res.error;
+      const nonceError =
+        reason === "ConflictingNonceInMempool" ? "conflict" :
+        reason === "BadNonce" ? "bad" : false;
+      console.error(`[${index + 1}/50] ✗ card=${card} | ${reason}`);
+      return { status: "error", nonceError };
     }
 
     console.log(`[${index + 1}/50] ✓ card=${card} stake=0.001 STX | ${res.txid}`);
-    return "sent";
+    return { status: "sent", nonceError: false };
   } catch (err) {
     console.error(`[${index + 1}/50] ✗ ${err.message}`);
-    return "error";
+    return { status: "error", nonceError: false };
   }
 }
 
@@ -148,8 +158,29 @@ async function run() {
     }
 
     const playerKey = PRIVATE_KEYS[i % PRIVATE_KEYS.length];
-    const result = await sendTransaction(playerKey, playerNonces[playerKey]++, sponsorNonce++, i);
-    if (result === "sent") sent++; else errors++;
+    const playerAddress = getAddressFromPrivateKey(playerKey, TransactionVersion.Mainnet);
+
+    const { status, nonceError } = await sendTransaction(
+      playerKey, playerNonces[playerKey], sponsorNonce, i
+    );
+
+    if (status === "sent") {
+      sent++;
+      playerNonces[playerKey]++;
+      sponsorNonce++;
+    } else {
+      errors++;
+      if (nonceError === "conflict") {
+        // Stuck pending TX in mempool — bump past it, don't re-fetch
+        playerNonces[playerKey]++;
+        sponsorNonce++;
+      } else if (nonceError === "bad") {
+        // Nonce too low (already confirmed) — re-fetch to get current value
+        playerNonces[playerKey] = await fetchNonce(playerAddress);
+        sponsorNonce = await fetchNonce(sponsorAddress);
+      }
+    }
+
     if (i < TOTAL_TX - 1) await sleep(DELAY_MS);
   }
 
