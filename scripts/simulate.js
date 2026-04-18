@@ -4,7 +4,6 @@ setDefaultResultOrder("ipv4first");
 import {
   makeContractCall,
   broadcastTransaction,
-  sponsorTransaction,
   AnchorMode,
   uintCV,
   PostConditionMode,
@@ -18,31 +17,21 @@ const network = new StacksMainnet();
 
 const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS ?? "SPQG93AEB9GACWCPZ92Z6FB440HX1CNP4ADT8S0X";
 const CONTRACT_NAME = "card-game-v2";
-const FUNCTION_NAME = "play";
 
-// Player wallets — need zero STX (fees covered by sponsor)
 const PRIVATE_KEYS = (process.env.PRIVATE_KEYS ?? "").split(",").filter(Boolean);
 
-// Sponsor wallet — pays all TX fees (the deployer wallet)
-const SPONSOR_KEY = process.env.SPONSOR_KEY ?? "";
-
 if (PRIVATE_KEYS.length === 0) {
-  console.error("Set PRIVATE_KEYS env var: comma-separated player private keys.");
-  process.exit(1);
-}
-if (!SPONSOR_KEY) {
-  console.error("Set SPONSOR_KEY env var: private key of the fee-paying sponsor wallet.");
+  console.error("Set PRIVATE_KEYS: comma-separated mainnet private keys.");
   process.exit(1);
 }
 
 // --- SETTINGS ---
-const TOTAL_TX = 25;
-const DELAY_MS = 800;
-const BATCH_SIZE = 24;          // Stacks mempool limit per address is 25 unconfirmed
-const BATCH_WAIT_MS = 660000;   // 11 min between batches — waits for a full Stacks block to confirm
-// Fixed small stake — contract still requires MIN_STAKE of 1000 µSTX
-// but sponsor covers fees; player wallets need 0 STX
-const FIXED_STAKE = 1000; // 0.001 STX
+// Each wallet needs ~0.5 STX: (TOTAL_TX / keys) × (0.002 fee + 0.001 stake)
+const TOTAL_TX       = 200;
+const BATCH_SIZE     = 24;       // max safe unconfirmed per address
+const BLOCK_WAIT_MS  = 660_000;  // 11 min — wait for block confirmation between batches
+const TX_DELAY_MS    = 300;      // ms between individual sends within a batch
+const FIXED_STAKE    = 1000;     // 0.001 STX
 
 // --- HELPERS ---
 
@@ -51,144 +40,157 @@ function getRandomCard() {
 }
 
 function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 async function fetchNonce(address, attempt = 0) {
   const res = await fetch(`https://api.hiro.so/extended/v1/address/${address}/nonces`);
   if (res.status === 429) {
-    const wait = 10000 * (attempt + 1);
-    console.log(`  Rate limited — waiting ${wait / 1000}s...`);
+    const wait = 15_000 * (attempt + 1);
+    console.log(`  ⏳ Rate limited — waiting ${wait / 1000}s`);
     await sleep(wait);
     return fetchNonce(address, attempt + 1);
   }
-  if (!res.ok) throw new Error(`Failed to fetch nonce for ${address}: ${res.status}`);
-  const data = await res.json();
-  return data.possible_next_nonce;
+  if (!res.ok) throw new Error(`Nonce fetch failed for ${address}: ${res.status}`);
+  const { possible_next_nonce } = await res.json();
+  return possible_next_nonce;
 }
 
-async function retry(fn, retries = 3, delayMs = 5000) {
-  for (let i = 0; i < retries; i++) {
-    try { return await fn(); }
-    catch (err) {
-      if (i < retries - 1) await sleep(delayMs);
-      else throw err;
+async function broadcast(tx) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const res = await broadcastTransaction(tx, network);
+      return res;
+    } catch {
+      if (attempt < 3) await sleep(8_000 * (attempt + 1));
     }
   }
+  throw new Error("broadcast failed after retries");
 }
 
-// --- TRANSACTION ---
-
-async function sendTransaction(playerKey, playerNonce, sponsorNonce, index) {
+// Send one TX from a wallet, returns { ok, nonceConsumed }
+async function sendOne(key, nonce, label) {
   const card = getRandomCard();
-
   try {
-    // Player signs with sponsored:true — no fee required from player
     const tx = await makeContractCall({
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
-      functionName: FUNCTION_NAME,
+      functionName: "play",
       functionArgs: [uintCV(card), uintCV(FIXED_STAKE)],
-      senderKey: playerKey,
+      senderKey: key,
       network,
       anchorMode: AnchorMode.Any,
       postConditionMode: PostConditionMode.Allow,
-      nonce: playerNonce,
-      fee: 0,
-      sponsored: true,
-    });
-
-    // Sponsor signs and sets the actual fee
-    const sponsored = await sponsorTransaction({
-      transaction: tx,
-      sponsorPrivateKey: SPONSOR_KEY,
+      nonce,
       fee: 2000,
-      sponsorNonce,
     });
 
-    const res = await retry(() => broadcastTransaction(sponsored, network));
+    const res = await broadcast(tx);
 
     if (res.error) {
       const reason = res.reason ?? res.error;
-      const nonceError =
-        reason === "ConflictingNonceInMempool" ? "conflict" :
-        reason === "BadNonce" ? "bad" : false;
-      console.error(`[${index + 1}/50] ✗ card=${card} | ${reason}`);
-      return { status: "error", nonceError };
+      console.log(`  ${label} ✗ card=${card} | ${reason}`);
+      const isConflict = reason === "ConflictingNonceInMempool";
+      const isBad      = reason === "BadNonce";
+      return { ok: false, isConflict, isBad };
     }
 
-    console.log(`[${index + 1}/50] ✓ card=${card} stake=0.001 STX | ${res.txid}`);
-    return { status: "sent", nonceError: false };
+    console.log(`  ${label} ✓ card=${card} | ${res.txid.slice(0, 16)}…`);
+    return { ok: true };
   } catch (err) {
-    console.error(`[${index + 1}/50] ✗ ${err.message}`);
-    return { status: "error", nonceError: false };
+    console.log(`  ${label} ✗ ${err.message}`);
+    return { ok: false, isConflict: false, isBad: false };
   }
+}
+
+// Send a batch of up to BATCH_SIZE TXs from one wallet, returns number sent
+async function sendBatch(key, nonce, batchIndex, walletLabel) {
+  let sent = 0;
+  let currentNonce = nonce;
+
+  for (let i = 0; i < BATCH_SIZE; i++) {
+    const label = `[${walletLabel} batch=${batchIndex + 1} tx=${i + 1}/${BATCH_SIZE}]`;
+    const { ok, isConflict, isBad } = await sendOne(key, currentNonce, label);
+
+    if (ok) {
+      sent++;
+      currentNonce++;
+    } else if (isConflict) {
+      currentNonce++; // skip stuck mempool slot
+    } else if (isBad) {
+      // Nonce too low — re-fetch and continue
+      const address = getAddressFromPrivateKey(key, TransactionVersion.Mainnet);
+      currentNonce = await fetchNonce(address);
+    }
+
+    if (i < BATCH_SIZE - 1) await sleep(TX_DELAY_MS);
+  }
+
+  return sent;
 }
 
 // --- RUN ---
 
 async function run() {
-  const sponsorAddress = getAddressFromPrivateKey(SPONSOR_KEY, TransactionVersion.Mainnet);
+  const addresses = PRIVATE_KEYS.map((k) =>
+    getAddressFromPrivateKey(k, TransactionVersion.Mainnet)
+  );
 
-  console.log(`\nTarget:  ${CONTRACT_ADDRESS}.${CONTRACT_NAME}`);
-  console.log(`Players: ${PRIVATE_KEYS.length} wallets (zero STX needed)`);
-  console.log(`Sponsor: ${sponsorAddress} (pays all fees)`);
-  console.log(`TXs:     ${TOTAL_TX}\n`);
+  console.log(`\n${"━".repeat(50)}`);
+  console.log(`Target : ${CONTRACT_ADDRESS}.${CONTRACT_NAME}`);
+  console.log(`Wallets: ${PRIVATE_KEYS.length}`);
+  console.log(`Goal   : ${TOTAL_TX} TXs`);
+  console.log(`Strategy: ${BATCH_SIZE} TXs/wallet/block, ~${Math.ceil(TOTAL_TX / (BATCH_SIZE * PRIVATE_KEYS.length))} rounds`);
+  console.log(`${"━".repeat(50)}\n`);
 
-  // Fetch nonces for all players and sponsor
-  const playerNonces = {};
-  for (const key of PRIVATE_KEYS) {
-    const address = getAddressFromPrivateKey(key, TransactionVersion.Mainnet);
-    playerNonces[key] = await fetchNonce(address);
-    console.log(`  Player ${address} — nonce: ${playerNonces[key]}`);
+  // Fetch starting nonces
+  const nonces = {};
+  for (let i = 0; i < PRIVATE_KEYS.length; i++) {
+    nonces[PRIVATE_KEYS[i]] = await fetchNonce(addresses[i]);
+    console.log(`Wallet ${i + 1}: ${addresses[i]} — nonce ${nonces[PRIVATE_KEYS[i]]}`);
   }
+  console.log();
 
-  let sponsorNonce = await fetchNonce(sponsorAddress);
-  console.log(`  Sponsor ${sponsorAddress} — nonce: ${sponsorNonce}\n`);
+  let totalSent = 0;
+  let round = 0;
 
-  let sent = 0, errors = 0;
+  while (totalSent < TOTAL_TX) {
+    console.log(`\n${"─".repeat(50)}`);
+    console.log(`Round ${round + 1} — ${totalSent}/${TOTAL_TX} sent so far`);
+    console.log(`${"─".repeat(50)}`);
 
-  for (let i = 0; i < TOTAL_TX; i++) {
-    // Pause between batches to let mempool drain (avoids TooMuchChaining)
-    if (i > 0 && i % BATCH_SIZE === 0) {
-      console.log(`\n⏳ Batch complete — waiting ${BATCH_WAIT_MS / 1000}s for mempool to clear...\n`);
-      await sleep(BATCH_WAIT_MS);
-      // Refresh sponsor nonce after wait — confirmed TXs free up slots
-      sponsorNonce = await fetchNonce(sponsorAddress);
-    }
-
-    const playerKey = PRIVATE_KEYS[i % PRIVATE_KEYS.length];
-    const playerAddress = getAddressFromPrivateKey(playerKey, TransactionVersion.Mainnet);
-
-    const { status, nonceError } = await sendTransaction(
-      playerKey, playerNonces[playerKey], sponsorNonce, i
+    // Send batches from all wallets in parallel
+    const results = await Promise.all(
+      PRIVATE_KEYS.map((key, i) =>
+        sendBatch(key, nonces[key], round, `W${i + 1}`)
+      )
     );
 
-    if (status === "sent") {
-      sent++;
-      playerNonces[playerKey]++;
-      sponsorNonce++;
-    } else {
-      errors++;
-      if (nonceError === "conflict") {
-        // Stuck pending TX in mempool — bump past it, don't re-fetch
-        playerNonces[playerKey]++;
-        sponsorNonce++;
-      } else if (nonceError === "bad") {
-        // Nonce too low (already confirmed) — re-fetch to get current value
-        playerNonces[playerKey] = await fetchNonce(playerAddress);
-        sponsorNonce = await fetchNonce(sponsorAddress);
+    const roundSent = results.reduce((a, b) => a + b, 0);
+    totalSent += roundSent;
+
+    // Advance nonces by batch size (approximate — re-fetch before next round)
+    PRIVATE_KEYS.forEach((key) => { nonces[key] += BATCH_SIZE; });
+
+    console.log(`\nRound ${round + 1} complete — sent ${roundSent}, total ${totalSent}/${TOTAL_TX}`);
+    round++;
+
+    if (totalSent < TOTAL_TX) {
+      console.log(`\n⏳ Waiting ${BLOCK_WAIT_MS / 60_000} min for block confirmation...\n`);
+      await sleep(BLOCK_WAIT_MS);
+
+      // Re-fetch nonces after block confirms
+      for (let i = 0; i < PRIVATE_KEYS.length; i++) {
+        nonces[PRIVATE_KEYS[i]] = await fetchNonce(addresses[i]);
+        console.log(`Wallet ${i + 1} refreshed nonce: ${nonces[PRIVATE_KEYS[i]]}`);
       }
     }
-
-    if (i < TOTAL_TX - 1) await sleep(DELAY_MS);
   }
 
-  console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-  console.log(`✅ Sent:   ${sent}`);
-  console.log(`✗  Errors: ${errors}`);
-  console.log(`Total fees: ~${(sent * 0.002).toFixed(3)} STX (paid by sponsor)`);
-  console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+  console.log(`\n${"━".repeat(50)}`);
+  console.log(`✅ Done — ${totalSent} transactions sent to ${CONTRACT_NAME}`);
+  console.log(`💸 Approx fees: ~${(totalSent * 0.002).toFixed(3)} STX`);
+  console.log(`${"━".repeat(50)}\n`);
 }
 
 run();
