@@ -44,15 +44,15 @@ if (!MNEMONIC) {
 // distributeAmount: what Account 0 sends to each sub-wallet
 // returnAmount: what each sub-wallet sends back to Account 0
 // Each sub-wallet needs: returnAmount + TX_FEE to execute Phase 2
-const TX_FEE           = 2000n;   // µSTX fee per contract call
+const TX_FEE           = 5000n;   // µSTX fee per contract call — INCREASED for reliability
 const returnAmount     = 1000n;   // µSTX returned to Account 0 in Phase 2
-const distributeAmount = returnAmount + TX_FEE + 500n; // 3500 µSTX (buffer covers tip's internal transfer)
+const distributeAmount = returnAmount + TX_FEE + 500n; // 6500 µSTX (buffer covers tip's internal transfer)
 
 // Number of sub-accounts to use (Phase 1: 1 TX each, Phase 2: 1 TX each = NUM_ACCOUNTS * 2 total TXs)
 const NUM_ACCOUNTS = 60; // 60 × 2 = 120 contract interactions per cycle
 const CYCLES       = 1;  // increase to repeat the full loop
 
-const TX_DELAY_MS = 300; // ms between sends within a phase
+const TX_DELAY_MS = 15000; // ms between sends within a phase — INCREASED to 15s to avoid TooMuchChaining
 
 // --- NONCE CACHE ---
 const nonceCache = new Map();
