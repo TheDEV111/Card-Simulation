@@ -1,7 +1,7 @@
 [project]
 name = "card-game"
 description = "Stacks Card Game"
-authors = ["SPQG93AEB9GACWCPZ92Z6FB440HX1CNP4ADT8S0X"]
+authors = ["SPD7WQ5ZTDXV45D3ZCY00N1WTRF106SH9XA0D979"]
 telemetry = false
 cache_dir = "./.clarinet"
 
