@@ -49,7 +49,7 @@ const returnAmount     = 1000n;   // µSTX returned to Account 0 in Phase 2
 const distributeAmount = returnAmount + TX_FEE + 500n; // 16500 µSTX (buffer covers tip's internal transfer)
 
 // Number of sub-accounts to use (Phase 1: 1 TX each, Phase 2: 1 TX each = NUM_ACCOUNTS * 2 total TXs)
-const NUM_ACCOUNTS = 2; // 2 × 2 = 4 contract interactions per cycle (testing with 2 transactions)
+const NUM_ACCOUNTS = 10; // 10 × 2 = 20 contract interactions per cycle
 const CYCLES       = 1;  // increase to repeat the full loop
 
 const TX_DELAY_MS = 15000; // ms between sends within a phase — INCREASED to 15s to avoid TooMuchChaining
