@@ -29,7 +29,7 @@ try {
 } catch {}
 
 // --- CONFIG ---
-const CONTRACT_ADDRESS = "SPQG93AEB9GACWCPZ92Z6FB440HX1CNP4ADT8S0X";
+const CONTRACT_ADDRESS = "SP19AHC15QDZJPDHTF5WQWKKZC6RE38W9D6VC56EH";
 const CONTRACT_NAME    = "stx-bouncer";
 const network          = new StacksMainnet();
 
