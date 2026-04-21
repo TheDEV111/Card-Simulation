@@ -29,7 +29,7 @@ try {
 } catch {}
 
 // --- CONFIG ---
-const CONTRACT_ADDRESS = "SPQG93AEB9GACWCPZ92Z6FB440HX1CNP4ADT8S0X";
+const CONTRACT_ADDRESS = "SP19AHC15QDZJPDHTF5WQWKKZC6RE38W9D6VC56EH";
 const CONTRACT_NAME    = "stx-bouncer";
 const network          = new StacksMainnet();
 
@@ -44,12 +44,12 @@ if (!MNEMONIC) {
 // distributeAmount: what Account 0 sends to each sub-wallet
 // returnAmount: what each sub-wallet sends back to Account 0
 // Each sub-wallet needs: returnAmount + TX_FEE to execute Phase 2
-const TX_FEE           = 5000n;   // µSTX fee per contract call — INCREASED for reliability
+const TX_FEE           = 15000n;  // µSTX fee per contract call — INCREASED for reliability
 const returnAmount     = 1000n;   // µSTX returned to Account 0 in Phase 2
-const distributeAmount = returnAmount + TX_FEE + 500n; // 6500 µSTX (buffer covers tip's internal transfer)
+const distributeAmount = returnAmount + TX_FEE + 500n; // 16500 µSTX (buffer covers tip's internal transfer)
 
 // Number of sub-accounts to use (Phase 1: 1 TX each, Phase 2: 1 TX each = NUM_ACCOUNTS * 2 total TXs)
-const NUM_ACCOUNTS = 60; // 60 × 2 = 120 contract interactions per cycle
+const NUM_ACCOUNTS = 50; // 10 × 2 = 20 contract interactions per cycle
 const CYCLES       = 1;  // increase to repeat the full loop
 
 const TX_DELAY_MS = 15000; // ms between sends within a phase — INCREASED to 15s to avoid TooMuchChaining
@@ -156,7 +156,7 @@ async function run() {
     wallet = generateNewAccount(wallet);
   }
 
-  const account0     = wallet.accounts[0];
+  const account0     = wallet.accounts[1]; // Account 2 (index 1) = SP19AHC15QDZJPDHTF5WQWKKZC6RE38W9D6VC56EH
   const acc0Key      = account0.stxPrivateKey;
   const acc0Address  = getAddressFromPrivateKey(acc0Key, TransactionVersion.Mainnet);
 
@@ -173,7 +173,6 @@ async function run() {
 
     // Phase 1: Account 0 tips sub-wallets
     console.log(`\nPhase 1 — distributing ${distributeAmount} µSTX to ${NUM_ACCOUNTS} sub-wallets...`);
-    let lastTxid = null;
     for (let i = 1; i <= NUM_ACCOUNTS; i++) {
       const recipientAddress = getAddressFromPrivateKey(
         wallet.accounts[i].stxPrivateKey,
@@ -185,35 +184,44 @@ async function run() {
         distributeAmount,
         `[C${cycle} P1 ${i}/${NUM_ACCOUNTS}]`
       );
-      if (txid) lastTxid = txid;
-      if (i < NUM_ACCOUNTS) await sleep(TX_DELAY_MS);
+      if (txid) {
+        const confirmed = await waitForConfirmation(txid);
+        if (!confirmed) {
+          console.error(`Phase 1 transaction ${i} failed to confirm. Stopping.`);
+          process.exit(1);
+        }
+      } else {
+        console.error(`Phase 1 transaction ${i} failed to broadcast. Stopping.`);
+        process.exit(1);
+      }
     }
 
-    // Wait for last Phase 1 TX to confirm before Phase 2
-    if (lastTxid) {
-      console.log(`\nPhase 1 complete. Waiting for block confirmation before Phase 2...`);
-      const confirmed = await waitForConfirmation(lastTxid);
-      if (!confirmed) {
-        console.error("Phase 1 did not fully confirm. Skipping Phase 2 this cycle.");
-        continue;
-      }
-      // Clear sub-wallet nonce cache so Phase 2 reads fresh on-chain nonces
-      for (let i = 1; i <= NUM_ACCOUNTS; i++) {
-        const addr = getAddressFromPrivateKey(wallet.accounts[i].stxPrivateKey, TransactionVersion.Mainnet);
-        nonceCache.delete(addr);
-      }
+    // Clear sub-wallet nonce cache before Phase 2
+    console.log(`\nPhase 1 complete. Clearing nonce cache for Phase 2...`);
+    for (let i = 1; i <= NUM_ACCOUNTS; i++) {
+      const addr = getAddressFromPrivateKey(wallet.accounts[i].stxPrivateKey, TransactionVersion.Mainnet);
+      nonceCache.delete(addr);
     }
 
     // Phase 2: Sub-wallets tip back to Account 0
     console.log(`\nPhase 2 — ${NUM_ACCOUNTS} sub-wallets returning ${returnAmount} µSTX to master...`);
     for (let i = 1; i <= NUM_ACCOUNTS; i++) {
-      await sendTip(
+      const txid = await sendTip(
         wallet.accounts[i].stxPrivateKey,
         acc0Address,
         returnAmount,
         `[C${cycle} P2 ${i}/${NUM_ACCOUNTS}]`
       );
-      if (i < NUM_ACCOUNTS) await sleep(TX_DELAY_MS);
+      if (txid) {
+        const confirmed = await waitForConfirmation(txid);
+        if (!confirmed) {
+          console.error(`Phase 2 transaction ${i} failed to confirm. Stopping.`);
+          process.exit(1);
+        }
+      } else {
+        console.error(`Phase 2 transaction ${i} failed to broadcast. Stopping.`);
+        process.exit(1);
+      }
     }
 
     console.log(`\nCycle ${cycle} complete — ${NUM_ACCOUNTS * 2} contract interactions generated.`);
