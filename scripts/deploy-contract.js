@@ -9,7 +9,7 @@ import {
 } from "@stacks/transactions";
 import { StacksMainnet } from "@stacks/network";
 
-const CONTRACT_CODE = readFileSync("./contracts/stx-bouncer.clar", "utf8");
+const CONTRACT_CODE = readFileSync("../contracts/stx-bouncer.clar", "utf8");
 const PRIVATE_KEY = "764384710f1cee746a850510effbb1e007c521c769b7aee9e69667e3ff9ed57c01";
 const WALLET_ADDRESS = "SP19AHC15QDZJPDHTF5WQWKKZC6RE38W9D6VC56EH";
 const network = new StacksMainnet();
