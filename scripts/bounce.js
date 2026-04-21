@@ -156,7 +156,7 @@ async function run() {
     wallet = generateNewAccount(wallet);
   }
 
-  const account0     = wallet.accounts[0];
+  const account0     = wallet.accounts[1]; // Account 2 (index 1) = SP19AHC15QDZJPDHTF5WQWKKZC6RE38W9D6VC56EH
   const acc0Key      = account0.stxPrivateKey;
   const acc0Address  = getAddressFromPrivateKey(acc0Key, TransactionVersion.Mainnet);
 
