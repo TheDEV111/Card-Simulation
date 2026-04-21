@@ -9,15 +9,8 @@ plan:
     - id: 0
       transactions:
         - contract-publish:
-            contract-name: card-game-v2
-            expected-sender: SPQG93AEB9GACWCPZ92Z6FB440HX1CNP4ADT8S0X
-            cost: 23290
-            path: contracts/card-game.clar
-            anchor-block-only: true
-            clarity-version: 2
-        - contract-publish:
             contract-name: stx-bouncer
-            expected-sender: SPQG93AEB9GACWCPZ92Z6FB440HX1CNP4ADT8S0X
+            expected-sender: SP19AHC15QDZJPDHTF5WQWKKZC6RE38W9D6VC56EH
             cost: 13250
             path: contracts/stx-bouncer.clar
             anchor-block-only: true
