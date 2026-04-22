@@ -7,7 +7,7 @@ let nextId = 0;
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 
-  const toast = useCallback(({ message, type = "info", duration = 3000 }) => {
+  const toast = useCallback((message, type = "info", duration = 4000) => {
     const id = ++nextId;
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), duration);
