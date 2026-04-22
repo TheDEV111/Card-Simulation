@@ -44,7 +44,7 @@ if (!MNEMONIC) {
 // distributeAmount: what Account 0 sends to each sub-wallet
 // returnAmount: what each sub-wallet sends back to Account 0
 // Each sub-wallet needs: returnAmount + TX_FEE to execute Phase 2
-const TX_FEE           = 10000n;  // µSTX fee per contract call — INCREASED for reliability
+const TX_FEE           = 8000n;  // µSTX fee per contract call — INCREASED for reliability
 const returnAmount     = 1000n;   // µSTX returned to Account 0 in Phase 2
 const distributeAmount = returnAmount + TX_FEE + 500n; // 16500 µSTX (buffer covers tip's internal transfer)
 
