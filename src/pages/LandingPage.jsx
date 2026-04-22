@@ -1,4 +1,5 @@
 import SkipToContent from "../components/ui/SkipToContent";
+import FloatingCTA from "../components/ui/FloatingCTA";
 import LandingScrollProgress from "../components/landing/LandingScrollProgress";
 import LandingAnnouncementBanner from "../components/landing/LandingAnnouncementBanner";
 import LandingNav from "../components/landing/LandingNav";
@@ -19,6 +20,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-surface text-white">
       <SkipToContent />
       <LandingScrollProgress />
+      <FloatingCTA />
       <LandingAnnouncementBanner />
       <LandingNav />
       <main id="main-content">
