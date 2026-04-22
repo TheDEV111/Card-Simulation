@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import NavItem from "./NavItem";
+import SidebarCTA from "../ui/SidebarCTA";
 import { ROUTES } from "../../utils/routes";
 import { cn } from "../../utils/cn";
 
@@ -33,7 +34,8 @@ export default function Sidebar({ className }) {
         {NAV.map((item) => <NavItem key={item.to} {...item} />)}
       </nav>
 
-      <div className="space-y-0.5 pt-4 border-t border-white/5">
+      <SidebarCTA />
+      <div className="space-y-0.5 pt-3 border-t border-white/5">
         {NAV_BOTTOM.map((item) => <NavItem key={item.to} {...item} />)}
       </div>
     </aside>
