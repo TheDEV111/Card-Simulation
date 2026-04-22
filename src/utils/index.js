@@ -4,3 +4,8 @@ export * from "./stats";
 export * from "./avatar";
 export * from "./routes";
 export * from "./constants";
+export * from "./animation";
+export * from "./time";
+export * from "./math";
+export * from "./string";
+export * from "./array";
