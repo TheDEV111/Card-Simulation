@@ -11,11 +11,11 @@ const ADDRESSES = [
 ];
 
 function makeGame(i) {
-  const outcome    = Math.random() > 0.667 ? "win" : "loss";
+  const outcome    = Math.random() < 0.333 ? "win" : "loss";
   const card       = rand(1, 3);
   const contractCard = outcome === "win" ? card : ((card % 3) + 1);
   const stake      = rand(1000, 1_000_000);
-  const payout     = outcome === "win" ? stake * 2 : 0;
+  const payout     = outcome === "win" ? stake * 3 : 0;
   const now        = Date.now();
   return {
     id:           `tx${i}`,
@@ -42,6 +42,7 @@ export const MOCK_LEADERBOARD = ADDRESSES.map((address, i) => {
     wins,
     losses:  games.length - wins,
     winRate: Math.round((wins / Math.max(games.length, 1)) * 100),
-    pnl:     games.reduce((s, g) => s + g.payout - g.stake, 0),
+    pnl:          games.reduce((s, g) => s + g.payout - g.stake, 0),
+    totalPayout:  games.filter((g) => g.outcome === "win").reduce((s, g) => s + g.payout, 0),
   };
 }).sort((a, b) => b.wins - a.wins).map((p, i) => ({ ...p, rank: i + 1 }));
