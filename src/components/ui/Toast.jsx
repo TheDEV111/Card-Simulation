@@ -3,15 +3,15 @@ import { useToast } from "../../context/ToastContext";
 const ICONS = {
   success: "✓",
   error:   "✕",
-  info:    "·",
-  warning: "!",
+  info:    "ℹ",
+  warning: "⚠",
 };
 
 const COLORS = {
   success: "border-win/40 bg-win/10 text-win",
   error:   "border-loss/40 bg-loss/10 text-loss",
-  info:    "border-white/20 bg-surface-overlay text-white/80",
-  warning: "border-pending/40 bg-pending/10 text-pending",
+  info:    "border-white/15 bg-surface-overlay text-white/80",
+  warning: "border-gold/40 bg-gold/10 text-gold",
 };
 
 function ToastItem({ id, message, type }) {
@@ -39,7 +39,11 @@ function ToastItem({ id, message, type }) {
 export default function Toasts() {
   const { toasts } = useToast();
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 w-80 max-w-[calc(100vw-2rem)]">
+    <div
+      aria-live="polite"
+      aria-atomic="false"
+      className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 w-80 max-w-[calc(100vw-2rem)]"
+    >
       {toasts.map((t) => (
         <ToastItem key={t.id} {...t} />
       ))}
