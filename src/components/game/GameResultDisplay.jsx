@@ -1,23 +1,25 @@
 import CardFlip from "../ui/CardFlip";
 import STXAmount from "../ui/STXAmount";
 import TransactionLink from "../ui/TransactionLink";
+import HashDisplay from "../ui/HashDisplay";
 
 export default function GameResultDisplay({ result, onPlayAgain }) {
   if (!result) return null;
 
-  const { outcome, card, contractCard, payout, txId } = result;
+  const { outcome, card, contractCard, payout, txId, stake } = result;
   const isWin = outcome === "win";
 
   return (
-    <div className={`panel p-8 text-center space-y-6 ${isWin ? "border-win/30" : "border-loss/20"}`}>
+    <div className={`panel p-8 text-center space-y-6 ${isWin ? "ring-1 ring-win/20" : "ring-1 ring-loss/10"}`}>
       <div className="space-y-2">
-        <p className={`text-3xl font-bold ${isWin ? "text-win" : "text-loss"}`} style={{ fontFamily: "Cinzel, serif" }}>
+        <p
+          className={`text-4xl font-bold tracking-tight ${isWin ? "text-win" : "text-loss"}`}
+          style={{ fontFamily: "Cinzel, serif" }}
+        >
           {isWin ? "You won!" : "You lost"}
         </p>
         <p className="text-sm text-white/40">
-          {isWin
-            ? `+${<STXAmount ustx={payout} />} — contract drew your suit!`
-            : "The contract drew a different suit."}
+          {isWin ? "Contract drew your suit — 3× payout!" : "The contract drew a different suit."}
         </p>
       </div>
 
@@ -40,8 +42,9 @@ export default function GameResultDisplay({ result, onPlayAgain }) {
       </div>
 
       {txId && (
-        <div className="flex justify-center">
-          <TransactionLink txId={txId} className="text-xs text-white/30 hover:text-gold/60 transition-colors" />
+        <div className="flex justify-center items-center gap-2">
+          <span className="text-xs text-white/25">TX</span>
+          <HashDisplay hash={txId} chars={6} />
         </div>
       )}
 
