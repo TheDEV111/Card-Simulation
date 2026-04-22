@@ -1,6 +1,6 @@
 import { useGameHistory } from "../hooks/useGameHistory";
 import PageHeader from "../components/ui/PageHeader";
-import FilterChipGroup from "../components/ui/FilterChip";
+import { FilterChipGroup } from "../components/ui/FilterChip";
 import SearchInput from "../components/ui/SearchInput";
 import GameHistoryRow from "../components/ui/GameHistoryRow";
 import Pagination from "../components/ui/Pagination";

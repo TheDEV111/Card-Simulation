@@ -1,14 +1,13 @@
 import { Link } from "react-router-dom";
 import { ROUTES } from "../utils/routes";
-import CardBack from "../components/ui/CardBack";
 
 export default function NotFoundPage() {
   return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-6 space-y-6">
-      <div className="flex gap-3 opacity-40">
-        <CardBack size="sm" />
-        <CardBack size="md" />
-        <CardBack size="sm" />
+      <div className="flex gap-3 opacity-40 text-5xl select-none" aria-hidden>
+        <span>♠</span>
+        <span>♦</span>
+        <span>♣</span>
       </div>
       <div className="space-y-2">
         <p className="label-caps">404</p>
