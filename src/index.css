@@ -4,20 +4,45 @@
 
 @layer base {
   body {
-    @apply bg-surface text-white font-sans antialiased;
+    @apply bg-surface text-white antialiased;
+    font-family: "Barlow", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: "Cinzel", serif;
+    line-height: 1.2;
   }
 
   *:focus-visible {
     @apply outline outline-2 outline-offset-2 outline-gold;
   }
+
+  ::-webkit-scrollbar        { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track  { background: transparent; }
+  ::-webkit-scrollbar-thumb  { @apply bg-white/10 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-white/20; }
+
+  ::selection { background: rgba(212,168,75,0.25); color: #fff; }
 }
 
 @layer components {
+  /* --- Buttons --- */
   .btn-primary {
     @apply w-full py-4 px-6 rounded-xl font-semibold text-base
       bg-gold text-surface transition-all duration-150
       hover:bg-gold-light active:scale-[0.98]
       disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100;
+    font-family: "Cinzel", serif;
+    letter-spacing: 0.04em;
+  }
+
+  .btn-secondary {
+    @apply px-5 py-2.5 rounded-xl font-medium text-sm
+      bg-surface-overlay border border-white/10 text-white/80
+      hover:border-gold/40 hover:text-white transition-all duration-150
+      disabled:opacity-40 disabled:cursor-not-allowed;
   }
 
   .btn-ghost {
@@ -26,9 +51,70 @@
       hover:border-gold/40 hover:text-white transition-all duration-150;
   }
 
+  .btn-danger {
+    @apply px-4 py-2 rounded-lg font-medium text-sm
+      border border-loss/30 text-loss/80
+      hover:border-loss/60 hover:text-loss transition-all duration-150;
+  }
+
+  /* --- Inputs --- */
   .input-field {
     @apply w-full bg-surface-overlay border border-white/10 rounded-xl
-      px-4 py-3 text-white placeholder-white/30 text-base
+      px-4 py-3 text-white placeholder-white/30 text-sm
       focus:border-gold/60 focus:ring-0 outline-none transition-colors;
+  }
+
+  .select-field {
+    @apply input-field appearance-none cursor-pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23ffffff40' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 36px;
+  }
+
+  /* --- Cards --- */
+  .panel {
+    @apply bg-surface-raised rounded-2xl border border-white/5;
+  }
+
+  .panel-interactive {
+    @apply panel transition-all duration-200
+      hover:border-white/10 hover:shadow-card-hover;
+  }
+
+  /* --- Skeletons --- */
+  .skeleton {
+    @apply bg-surface-overlay rounded-lg overflow-hidden relative;
+  }
+
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255,255,255,0.04) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s infinite;
+  }
+
+  /* --- Labels --- */
+  .label-caps {
+    @apply text-2xs uppercase tracking-widest text-white/40 font-medium;
+  }
+
+  /* --- Stat numbers --- */
+  .stat-number {
+    @apply text-2xl font-bold text-gold;
+    font-family: "Cinzel", serif;
+  }
+
+  /* --- Table --- */
+  .table-row {
+    @apply border-b border-white/5 last:border-0
+      hover:bg-surface-overlay/60 transition-colors duration-100;
   }
 }
