@@ -12,6 +12,7 @@ import LandingLeaderboard from "../components/landing/LandingLeaderboard";
 import LandingGamePreview from "../components/landing/LandingGamePreview";
 import LandingFAQ from "../components/landing/LandingFAQ";
 import LandingCTA from "../components/landing/LandingCTA";
+import LandingFooter from "../components/landing/LandingFooter";
 
 export default function LandingPage() {
   return (
@@ -32,6 +33,7 @@ export default function LandingPage() {
         <LandingFAQ />
         <LandingCTA />
       </main>
+      <LandingFooter />
     </div>
   );
 }
