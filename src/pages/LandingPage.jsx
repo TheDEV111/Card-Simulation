@@ -1,3 +1,4 @@
+import SkipToContent from "../components/ui/SkipToContent";
 import LandingScrollProgress from "../components/landing/LandingScrollProgress";
 import LandingAnnouncementBanner from "../components/landing/LandingAnnouncementBanner";
 import LandingNav from "../components/landing/LandingNav";
@@ -15,19 +16,22 @@ import LandingCTA from "../components/landing/LandingCTA";
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-surface text-white">
+      <SkipToContent />
       <LandingScrollProgress />
       <LandingAnnouncementBanner />
       <LandingNav />
-      <LandingHero />
-      <LandingTrustBar />
-      <LandingStats />
-      <LandingHowItWorks />
-      <LandingFeatures />
-      <LandingOdds />
-      <LandingLeaderboard />
-      <LandingGamePreview />
-      <LandingFAQ />
-      <LandingCTA />
+      <main id="main-content">
+        <LandingHero />
+        <LandingTrustBar />
+        <LandingStats />
+        <LandingHowItWorks />
+        <LandingFeatures />
+        <LandingOdds />
+        <LandingLeaderboard />
+        <LandingGamePreview />
+        <LandingFAQ />
+        <LandingCTA />
+      </main>
     </div>
   );
 }
