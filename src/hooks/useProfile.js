@@ -1,11 +1,13 @@
 import { useMemo } from "react";
 import { useGameStats } from "./useGameStats";
 import { useRewards } from "./useRewards";
+import { useWallet } from "../context/WalletContext";
 import { MOCK_LEADERBOARD } from "../utils/mockData";
 
-export function useProfile(address) {
-  const stats    = useGameStats(address);
-  const rewards  = useRewards(stats);
+export function useProfile() {
+  const { address } = useWallet();
+  const stats       = useGameStats();
+  const { achievements } = useRewards();
 
   const rank = useMemo(() => {
     if (!address) return null;
@@ -13,5 +15,5 @@ export function useProfile(address) {
     return idx >= 0 ? idx + 1 : null;
   }, [address]);
 
-  return { stats, rewards, rank };
+  return { address, stats, achievements, rank };
 }
