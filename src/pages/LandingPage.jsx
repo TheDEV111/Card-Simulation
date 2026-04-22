@@ -1,3 +1,5 @@
+import LandingScrollProgress from "../components/landing/LandingScrollProgress";
+import LandingAnnouncementBanner from "../components/landing/LandingAnnouncementBanner";
 import LandingNav from "../components/landing/LandingNav";
 import LandingHero from "../components/landing/LandingHero";
 import LandingTrustBar from "../components/landing/LandingTrustBar";
@@ -13,6 +15,8 @@ import LandingCTA from "../components/landing/LandingCTA";
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-surface text-white">
+      <LandingScrollProgress />
+      <LandingAnnouncementBanner />
       <LandingNav />
       <LandingHero />
       <LandingTrustBar />
