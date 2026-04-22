@@ -1,7 +1,7 @@
 import CardFlip from "../ui/CardFlip";
 import STXAmount from "../ui/STXAmount";
-import TransactionLink from "../ui/TransactionLink";
 import HashDisplay from "../ui/HashDisplay";
+import ConfettiWin from "../ui/ConfettiWin";
 
 export default function GameResultDisplay({ result, onPlayAgain }) {
   if (!result) return null;
@@ -10,6 +10,8 @@ export default function GameResultDisplay({ result, onPlayAgain }) {
   const isWin = outcome === "win";
 
   return (
+    <>
+    <ConfettiWin active={isWin} />
     <div className={`panel p-8 text-center space-y-6 ${isWin ? "ring-1 ring-win/20" : "ring-1 ring-loss/10"}`}>
       <div className="space-y-2">
         <p
@@ -56,5 +58,6 @@ export default function GameResultDisplay({ result, onPlayAgain }) {
         Play again
       </button>
     </div>
+    </>
   );
 }
