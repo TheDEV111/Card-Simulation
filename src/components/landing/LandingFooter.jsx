@@ -1,44 +1,32 @@
 import { Link } from "react-router-dom";
 import { ROUTES } from "../../utils/routes";
-import LandingSocialLinks from "./LandingSocialLinks";
-import { APP_NAME } from "../../utils/constants";
+import { useContractInfo } from "../../hooks/useContractInfo";
+import { explorerTxUrl } from "../../utils/stacks";
 
-const LINKS = [
-  { label: "Play", to: ROUTES.GAME },
-  { label: "How it works", to: ROUTES.HOW_TO_PLAY },
-  { label: "Leaderboard", to: ROUTES.LEADERBOARD },
-  { label: "Dashboard", to: ROUTES.DASHBOARD },
-];
+export default function LandingFooter({ className = "" }) {
+  const contract = useContractInfo();
 
-export default function LandingFooter() {
   return (
-    <footer className="border-t border-white/5 px-6 py-10">
-      <div className="max-w-2xl mx-auto space-y-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-          <div className="space-y-1">
-            <p className="text-sm font-semibold text-white" style={{ fontFamily: "Cinzel, serif" }}>
-              {APP_NAME}
-            </p>
-            <p className="text-xs text-white/30">Built on Stacks · Provably Fair</p>
-          </div>
-          <nav className="flex flex-wrap gap-4">
-            {LINKS.map((link) => (
-              <Link
-                key={link.label}
-                to={link.to}
-                className="text-xs text-white/40 hover:text-white/70 transition-colors"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
+    <footer className={`border-t border-white/5 py-10 px-6 ${className}`}>
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div className="flex flex-wrap gap-x-8 gap-y-3 text-xs text-white/30">
+          <Link to={ROUTES.HOME}        className="hover:text-white/60 transition-colors">Home</Link>
+          <Link to={ROUTES.GAME}        className="hover:text-white/60 transition-colors">Play</Link>
+          <Link to={ROUTES.LEADERBOARD} className="hover:text-white/60 transition-colors">Leaderboard</Link>
+          <Link to={ROUTES.ABOUT}       className="hover:text-white/60 transition-colors">About</Link>
+          <a
+            href={explorerTxUrl(contract.address)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-white/60 transition-colors"
+          >
+            Smart contract ↗
+          </a>
         </div>
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-white/20">
-            © {new Date().getFullYear()} {APP_NAME}
-          </p>
-          <LandingSocialLinks />
-        </div>
+        <p className="text-[10px] text-white/15 max-w-md leading-relaxed">
+          Stacks Card Game is an on-chain game running on Stacks mainnet. Play responsibly.
+          The house edge is 0%. Smart contract audits are available on request.
+        </p>
       </div>
     </footer>
   );
