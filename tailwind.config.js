@@ -72,6 +72,14 @@ export default {
       },
       transitionTimingFunction: {
         "expo-out": "cubic-bezier(0.16,1,0.3,1)",
+        "snappy":   "cubic-bezier(0.4,0,0.2,1)",
+      },
+      backdropBlur: {
+        xs: "2px",
+      },
+      spacing: {
+        18: "4.5rem",
+        22: "5.5rem",
       },
     },
   },
