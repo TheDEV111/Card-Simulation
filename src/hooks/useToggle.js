@@ -1,9 +1,9 @@
 import { useState, useCallback } from "react";
 
 export function useToggle(initial = false) {
-  const [state, setState] = useState(initial);
-  const toggle = useCallback(() => setState((s) => !s), []);
-  const setOn = useCallback(() => setState(true), []);
-  const setOff = useCallback(() => setState(false), []);
-  return [state, toggle, setOn, setOff];
+  const [value, setValue] = useState(initial);
+  const toggle = useCallback(() => setValue((v) => !v), []);
+  const on     = useCallback(() => setValue(true), []);
+  const off    = useCallback(() => setValue(false), []);
+  return [value, toggle, { on, off }];
 }

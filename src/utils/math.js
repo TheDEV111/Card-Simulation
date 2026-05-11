@@ -6,17 +6,46 @@ export function lerp(a, b, t) {
   return a + (b - a) * t;
 }
 
-export function normalize(value, min, max) {
-  if (max === min) return 0;
-  return (value - min) / (max - min);
+export function inverseLerp(a, b, value) {
+  return (value - a) / (b - a);
 }
 
-export function roundTo(value, decimals = 2) {
-  const factor = Math.pow(10, decimals);
+export function remap(value, inMin, inMax, outMin, outMax) {
+  return lerp(outMin, outMax, inverseLerp(inMin, inMax, value));
+}
+
+export function round(value, decimals = 0) {
+  const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
 }
 
-export function pct(numerator, denominator, decimals = 1) {
-  if (!denominator) return 0;
-  return roundTo((numerator / denominator) * 100, decimals);
+export function sum(arr) {
+  return arr.reduce((acc, v) => acc + v, 0);
+}
+
+export function avg(arr) {
+  return arr.length ? sum(arr) / arr.length : 0;
+}
+
+export function median(arr) {
+  if (!arr.length) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+export function stdDev(arr) {
+  const mean = avg(arr);
+  const variance = avg(arr.map((v) => (v - mean) ** 2));
+  return Math.sqrt(variance);
+}
+
+export function isPowerOfTwo(n) {
+  return n > 0 && (n & (n - 1)) === 0;
+}
+
+export function nextPowerOfTwo(n) {
+  let p = 1;
+  while (p < n) p <<= 1;
+  return p;
 }

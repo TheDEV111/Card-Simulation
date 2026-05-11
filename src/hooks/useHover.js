@@ -1,21 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useCallback } from "react";
 
 export function useHover() {
   const [hovered, setHovered] = useState(false);
-  const ref = useRef(null);
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const enter = () => setHovered(true);
-    const leave = () => setHovered(false);
-    el.addEventListener("mouseenter", enter);
-    el.addEventListener("mouseleave", leave);
-    return () => {
-      el.removeEventListener("mouseenter", enter);
-      el.removeEventListener("mouseleave", leave);
-    };
-  }, []);
+  const onMouseEnter = useCallback(() => setHovered(true), []);
+  const onMouseLeave = useCallback(() => setHovered(false), []);
 
-  return [ref, hovered];
+  return [hovered, { onMouseEnter, onMouseLeave }];
 }

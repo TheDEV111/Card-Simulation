@@ -1,9 +1,18 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 
-export default function Tooltip({ children, content, position = "top" }) {
-  const [open, setOpen] = useState(false);
+export default function Tooltip({ content, placement = "top", delay = 300, children, className = "" }) {
+  const [visible, setVisible] = useState(false);
+  const timerRef = useRef(null);
 
-  const posMap = {
+  function show() {
+    timerRef.current = setTimeout(() => setVisible(true), delay);
+  }
+  function hide() {
+    clearTimeout(timerRef.current);
+    setVisible(false);
+  }
+
+  const positions = {
     top:    "bottom-full left-1/2 -translate-x-1/2 mb-2",
     bottom: "top-full left-1/2 -translate-x-1/2 mt-2",
     left:   "right-full top-1/2 -translate-y-1/2 mr-2",
@@ -11,22 +20,22 @@ export default function Tooltip({ children, content, position = "top" }) {
   };
 
   return (
-    <div
-      className="relative inline-flex"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
-      onBlur={() => setOpen(false)}
+    <span
+      className={`relative inline-flex ${className}`}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={show}
+      onBlur={hide}
     >
       {children}
-      {open && (
-        <div
+      {visible && content && (
+        <span
+          className={`pointer-events-none absolute z-50 whitespace-nowrap rounded-lg bg-gray-900 px-3 py-1.5 text-xs text-white shadow-lg dark:bg-gray-700 ${positions[placement] ?? positions.top}`}
           role="tooltip"
-          className={`absolute z-50 px-2.5 py-1.5 rounded-lg bg-surface-high border border-white/10 text-xs text-white/80 whitespace-nowrap pointer-events-none shadow-lg ${posMap[position]}`}
         >
           {content}
-        </div>
+        </span>
       )}
-    </div>
+    </span>
   );
 }
