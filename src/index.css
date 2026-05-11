@@ -117,4 +117,34 @@
     @apply border-b border-white/5 last:border-0
       hover:bg-surface-overlay/60 transition-colors duration-100;
   }
+
+  /* --- Landing sections --- */
+  .landing-section {
+    @apply px-6 py-16 border-t border-white/5;
+  }
+
+  .landing-section-inner {
+    @apply max-w-2xl mx-auto;
+  }
+
+  /* --- Reveal animation --- */
+  .reveal-enter {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  .reveal-enter-active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* --- Gold shimmer --- */
+  .gold-shimmer {
+    background: linear-gradient(90deg, #d4a84b 0%, #e8c068 50%, #d4a84b 100%);
+    background-size: 200% 100%;
+    animation: shimmer 2.4s infinite;
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
 }
