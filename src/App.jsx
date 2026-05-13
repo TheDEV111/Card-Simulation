@@ -8,6 +8,7 @@ import WalletConnect from "./components/WalletConnect";
 import CardSelector from "./components/CardSelector";
 import StakeInput from "./components/StakeInput";
 import GameResult from "./components/GameResult";
+import About from "./components/about/About";
 
 const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS ?? "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM";
 const CONTRACT_NAME = "card-game-v2";
@@ -88,6 +89,9 @@ export default function App() {
       </header>
 
       <main className="flex-1 flex items-center justify-center p-6">
+        {page === "about" ? (
+          <About onBack={() => setPage("game")} />
+        ) : (
         <div className="w-full max-w-sm space-y-6">
           {status === "done" && result ? (
             <GameResult result={result} txId={txId} onReset={handleReset} />
@@ -135,6 +139,7 @@ export default function App() {
             </>
           )}
         </div>
+        )}
       </main>
     </div>
   );
