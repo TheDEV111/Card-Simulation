@@ -4,6 +4,7 @@ setDefaultResultOrder("ipv4first");
 import { generateWallet, generateNewAccount } from "@stacks/wallet-sdk";
 import {
   makeContractCall,
+  makeSTXTokenTransfer,
   broadcastTransaction,
   AnchorMode,
   TransactionVersion,
@@ -17,7 +18,6 @@ import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
-// Load .env from project root (no dotenv dependency needed)
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const envPath = resolve(__dirname, "../.env");
 try {
@@ -40,19 +40,25 @@ if (!MNEMONIC) {
 }
 
 // --- AMOUNTS ---
-// tip() routes STX: caller -> contract -> recipient, costing 2 transfers
-// distributeAmount: what Account 0 sends to each sub-wallet
-// returnAmount: what each sub-wallet sends back to Account 0
-// Each sub-wallet needs: returnAmount + TX_FEE to execute Phase 2
-const TX_FEE           = 1500n;   // µSTX fee per contract call — mainnet median is ~1000, 1500 is safe floor
-const returnAmount     = 1000n;   // µSTX returned to Account 0 in Phase 2
-const distributeAmount = returnAmount + TX_FEE + 500n; // 3000 µSTX (returnAmount + fee + 500 buffer)
+// Phase 1 uses a plain STX transfer (not a contract call) — far cheaper fee.
+// Phase 2 uses a contract call (tip) — this is what generates the DAU signal.
+const FUND_FEE         = 800n;   // µSTX fee for Phase 1 plain transfer — 200 was too low and got dropped
+const TX_FEE           = 1000n;  // µSTX fee for Phase 2 contract call (mainnet median)
+const returnAmount     = 1n;     // µSTX returned in Phase 2 — minimum nonzero
+const distributeAmount = returnAmount + TX_FEE + 500n; // 1501 µSTX (funds Phase 2 + safe buffer)
 
-// Number of sub-accounts to use (Phase 1: 1 TX each, Phase 2: 1 TX each = NUM_ACCOUNTS * 2 total TXs)
-const NUM_ACCOUNTS = 20; // 10 × 2 = 20 contract interactions per cycle
-const CYCLES       = 1;  // increase to repeat the full loop
+// --- SCALE CONFIG ---
+// Each sub-wallet = 1 unique DAU. Raise NUM_ACCOUNTS to increase daily DAU.
+// Cost per run ≈ NUM_ACCOUNTS * (distributeAmount + FUND_FEE) / 1_000_000 STX
+//   500 accounts ≈ 0.65 STX/run  |  1000 accounts ≈ 1.30 STX/run
+const NUM_ACCOUNTS = 1000;
+const CYCLES       = 1;
 
-const TX_DELAY_MS = 15000; // ms between sends within a phase — INCREASED to 15s to avoid TooMuchChaining
+// Phase 1 (master → subs) is batched to stay under Stacks' ~25-tx mempool limit per account.
+// Phase 2 (subs → master) is fully parallel — each sub is a distinct sender.
+const BATCH_SIZE      = 20;   // P1 txs in flight before waiting for confirmations
+const P2_CONCURRENCY  = 50;   // P2 parallel senders per wave (each is a different address)
+const TX_DELAY_MS     = 3000; // small delay between P1 batches to avoid rate limits
 
 // --- NONCE CACHE ---
 const nonceCache = new Map();
@@ -79,36 +85,25 @@ async function fetchNonce(address, attempt = 0) {
 
 async function waitForConfirmation(txid, pollMs = 30_000, timeoutMs = 1_200_000) {
   const deadline = Date.now() + timeoutMs;
-  console.log(`\n  Waiting for confirmation: ${txid.slice(0, 20)}...`);
+  console.log(`  Waiting: ${txid.slice(0, 20)}…`);
   while (Date.now() < deadline) {
     try {
       const res  = await fetch(`https://api.hiro.so/extended/v1/tx/${txid}`);
-      if (res.status === 429) {
-        console.log(`  Rate limited — waiting 20s`);
-        await sleep(20_000);
-        continue;
-      }
+      if (res.status === 429) { await sleep(20_000); continue; }
       const data = await res.json();
-      if (data.tx_status === "success") {
-        console.log(`  Confirmed.`);
-        return { ok: true };
-      }
+      if (data.tx_status === "success") { console.log(`  Confirmed.`); return { ok: true }; }
       if (data.tx_status?.startsWith("abort")) {
-        // Decode the Clarity result to show what the contract returned
         const result = data.tx_result?.repr ?? data.tx_result?.value ?? "(unknown)";
-        const events = (data.events ?? []).map((e) => e.type).join(", ") || "none";
-        console.error(`  Aborted: ${data.tx_status}`);
-        console.error(`  Clarity result: ${result}`);
-        console.error(`  Contract events: ${events}`);
-        return { ok: false, aborted: true, reason: result, status: data.tx_status };
+        console.error(`  Aborted: ${result}`);
+        return { ok: false, aborted: true, reason: result };
       }
-      console.log(`  Status: ${data.tx_status || "pending"} — rechecking in ${pollMs / 1000}s`);
+      console.log(`  ${data.tx_status || "pending"} — retry in ${pollMs / 1000}s`);
     } catch (e) {
       console.error(`  Poll error: ${e.message}`);
     }
     await sleep(pollMs);
   }
-  console.error(`  Timed out waiting for: ${txid}`);
+  console.error(`  Timed out: ${txid}`);
   return { ok: false, timedOut: true };
 }
 
@@ -122,10 +117,42 @@ async function fetchBalance(address) {
   }
 }
 
+// Plain STX transfer — used in Phase 1 to fund sub-wallets cheaply.
+// Does NOT call the contract so it doesn't count as a DAU interaction,
+// but the master is only 1 DAU anyway vs 500 from the subs.
+async function fundWallet(senderKey, recipientAddress, amount, label) {
+  const senderAddress = getAddressFromPrivateKey(senderKey, TransactionVersion.Mainnet);
+  const nonce = await fetchNonce(senderAddress);
+  try {
+    const tx = await makeSTXTokenTransfer({
+      recipient: recipientAddress,
+      amount,
+      senderKey,
+      network,
+      nonce,
+      fee: FUND_FEE,
+      anchorMode: AnchorMode.Any,
+    });
+    const res = await broadcastTransaction(tx, network);
+    if (res.error) {
+      const reason = res.reason ?? res.error;
+      console.log(`  ${label} ✗ | ${reason}`);
+      if (reason === "ConflictingNonceInMempool") nonceCache.set(senderAddress, nonce + 1n);
+      if (reason === "BadNonce") nonceCache.delete(senderAddress);
+      return null;
+    }
+    console.log(`  ${label} ✓ | ${res.txid.slice(0, 20)}…`);
+    nonceCache.set(senderAddress, nonce + 1n);
+    return res.txid;
+  } catch (err) {
+    console.log(`  ${label} ✗ | ${err.message}`);
+    return null;
+  }
+}
+
 async function sendTip(senderKey, recipientAddress, amount, label) {
   const senderAddress = getAddressFromPrivateKey(senderKey, TransactionVersion.Mainnet);
   const nonce = await fetchNonce(senderAddress);
-
   try {
     const tx = await makeContractCall({
       contractAddress: CONTRACT_ADDRESS,
@@ -139,9 +166,7 @@ async function sendTip(senderKey, recipientAddress, amount, label) {
       anchorMode: AnchorMode.Any,
       postConditionMode: PostConditionMode.Allow,
     });
-
     const res = await broadcastTransaction(tx, network);
-
     if (res.error) {
       const reason = res.reason ?? res.error;
       console.log(`  ${label} ✗ | ${reason}`);
@@ -149,7 +174,6 @@ async function sendTip(senderKey, recipientAddress, amount, label) {
       if (reason === "BadNonce") nonceCache.delete(senderAddress);
       return null;
     }
-
     console.log(`  ${label} ✓ | ${res.txid.slice(0, 20)}…`);
     nonceCache.set(senderAddress, nonce + 1n);
     return res.txid;
@@ -159,153 +183,165 @@ async function sendTip(senderKey, recipientAddress, amount, label) {
   }
 }
 
+async function sendWithRetry(senderKey, recipientAddress, amount, label, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    if (attempt > 1) {
+      const addr = getAddressFromPrivateKey(senderKey, TransactionVersion.Mainnet);
+      nonceCache.delete(addr);
+      console.log(`  Retry ${attempt}/${maxRetries} for ${label}…`);
+      await sleep(20_000);
+    }
+    const txid = await sendTip(senderKey, recipientAddress, amount, label);
+    if (!txid) continue;
+    const result = await waitForConfirmation(txid);
+    if (result.ok) return true;
+    if (result.aborted) {
+      if (result.reason === "(err u1)") { await sleep(30_000); continue; }
+      return false;
+    }
+  }
+  return false;
+}
+
 // --- MAIN ---
 
 async function run() {
-  console.log(`\n${"━".repeat(55)}`);
+  console.log(`\n${"━".repeat(60)}`);
   console.log(`Contract  : ${CONTRACT_ADDRESS}.${CONTRACT_NAME}`);
   console.log(`Accounts  : 1 master + ${NUM_ACCOUNTS} sub-wallets`);
-  console.log(`TXs/cycle : ${NUM_ACCOUNTS * 2} (${NUM_ACCOUNTS} distribute + ${NUM_ACCOUNTS} return)`);
-  console.log(`Cycles    : ${CYCLES}`);
-  console.log(`${"━".repeat(55)}\n`);
+  console.log(`DAU/run   : ~${NUM_ACCOUNTS + 1} unique addresses`);
+  console.log(`TXs/cycle : ${NUM_ACCOUNTS * 2}`);
+  console.log(`P1 batch  : ${BATCH_SIZE} | P2 concurrency: ${P2_CONCURRENCY}`);
+  console.log(`${"━".repeat(60)}\n`);
 
-  // Derive wallets from mnemonic
-  console.log("Deriving wallets from mnemonic...");
+  console.log("Deriving wallets…");
   let wallet = await generateWallet({ secretKey: MNEMONIC, password: "" });
   while (wallet.accounts.length <= NUM_ACCOUNTS) {
     wallet = generateNewAccount(wallet);
   }
 
-  const account0     = wallet.accounts[1]; // Account 2 (index 1) = SP19AHC15QDZJPDHTF5WQWKKZC6RE38W9D6VC56EH
-  const acc0Key      = account0.stxPrivateKey;
-  const acc0Address  = getAddressFromPrivateKey(acc0Key, TransactionVersion.Mainnet);
+  const account0    = wallet.accounts[1];
+  const acc0Key     = account0.stxPrivateKey;
+  const acc0Address = getAddressFromPrivateKey(acc0Key, TransactionVersion.Mainnet);
 
-  console.log(`Master wallet (Account 0): ${acc0Address}`);
-  console.log(`Sub-wallets: Account 1 — Account ${NUM_ACCOUNTS}\n`);
+  console.log(`Master : ${acc0Address}`);
 
-  // Pre-fetch Account 0 nonce + balance
   await fetchNonce(acc0Address);
   const balance = await fetchBalance(acc0Address);
-  const needed  = BigInt(NUM_ACCOUNTS) * (distributeAmount + TX_FEE);
-  console.log(`Master balance : ${balance} µSTX (${(Number(balance) / 1_000_000).toFixed(4)} STX)`);
-  console.log(`Estimated cost : ${needed} µSTX (${(Number(needed) / 1_000_000).toFixed(4)} STX)\n`);
+  const needed  = BigInt(NUM_ACCOUNTS) * (distributeAmount + FUND_FEE);
+  console.log(`Balance : ${(Number(balance) / 1_000_000).toFixed(4)} STX`);
+  console.log(`Needed  : ${(Number(needed)  / 1_000_000).toFixed(4)} STX\n`);
   if (balance < needed) {
-    console.error(`Insufficient balance. Need at least ${needed} µSTX, have ${balance} µSTX.`);
+    console.error(`Insufficient balance. Need ${(Number(needed) / 1_000_000).toFixed(4)} STX, have ${(Number(balance) / 1_000_000).toFixed(4)} STX.`);
     process.exit(1);
   }
 
-  const MAX_RETRIES = 3;
-
-  async function sendWithRetry(senderKey, recipientAddress, amount, label) {
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      if (attempt > 1) {
-        console.log(`  Retry ${attempt}/${MAX_RETRIES} for ${label} — waiting 20s...`);
-        // Re-fetch nonce on retry to avoid stale cache after an abort
-        const addr = getAddressFromPrivateKey(senderKey, TransactionVersion.Mainnet);
-        nonceCache.delete(addr);
-        await sleep(20_000);
-      }
-
-      const txid = await sendTip(senderKey, recipientAddress, amount, label);
-      if (!txid) {
-        console.error(`  Broadcast failed (attempt ${attempt})`);
-        continue;
-      }
-
-      const result = await waitForConfirmation(txid);
-      if (result.ok) return true;
-
-      if (result.aborted) {
-        console.error(`  Contract aborted with: ${result.reason}`);
-        // (err u1) = stx-transfer? insufficient balance — worth retrying after a delay
-        // (err u2) = sender == recipient, (err u3) = zero amount — never retry these
-        if (result.reason === "(err u1)") {
-          console.error(`  Insufficient balance on sender — retrying after 30s delay`);
-          await sleep(30_000);
-          continue;
-        }
-        console.error(`  Non-retryable contract abort — skipping this TX`);
-        return false;
-      }
-
-      if (result.timedOut) {
-        console.error(`  TX timed out (attempt ${attempt})`);
-        continue;
-      }
-    }
-    return false;
-  }
-
   for (let cycle = 1; cycle <= CYCLES; cycle++) {
-    console.log(`\n${"─".repeat(55)}`);
-    console.log(`Cycle ${cycle}/${CYCLES}`);
-    console.log(`${"─".repeat(55)}`);
+    console.log(`\n${"─".repeat(60)}\nCycle ${cycle}/${CYCLES}\n${"─".repeat(60)}`);
 
-    // Phase 1: Account 0 tips sub-wallets
-    console.log(`\nPhase 1 — distributing ${distributeAmount} µSTX to ${NUM_ACCOUNTS} sub-wallets...`);
+    // ── Phase 1: master → sub-wallets (batched, serial per batch) ──────────
+    // Master is one account so we can only have BATCH_SIZE txs in-flight at once
+    // to stay under Stacks' mempool chaining limit.
+    console.log(`\nPhase 1 — distributing to ${NUM_ACCOUNTS} sub-wallets (batch=${BATCH_SIZE})…`);
     let p1Failures = 0;
-    for (let i = 1; i <= NUM_ACCOUNTS; i++) {
-      const recipientAddress = getAddressFromPrivateKey(
-        wallet.accounts[i].stxPrivateKey,
-        TransactionVersion.Mainnet
-      );
-      const ok = await sendWithRetry(
-        acc0Key,
-        recipientAddress,
-        distributeAmount,
-        `[C${cycle} P1 ${i}/${NUM_ACCOUNTS}]`
-      );
-      if (!ok) {
-        p1Failures++;
-        console.error(`  ⚠ TX ${i} failed after retries — continuing with remaining wallets`);
+
+    for (let batchStart = 1; batchStart <= NUM_ACCOUNTS; batchStart += BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, NUM_ACCOUNTS);
+      console.log(`  Batch ${batchStart}–${batchEnd}`);
+
+      const batchResults = [];
+      for (let i = batchStart; i <= batchEnd; i++) {
+        const recipientAddress = getAddressFromPrivateKey(
+          wallet.accounts[i].stxPrivateKey,
+          TransactionVersion.Mainnet
+        );
+        const txid = await fundWallet(acc0Key, recipientAddress, distributeAmount, `[P1 ${i}]`);
+        batchResults.push({ i, txid });
       }
-      if (i < NUM_ACCOUNTS) await sleep(TX_DELAY_MS);
+
+      // Wait for the whole batch before starting the next one
+      for (const { i, txid } of batchResults) {
+        if (!txid) { p1Failures++; continue; }
+        const result = await waitForConfirmation(txid);
+        if (!result.ok) p1Failures++;
+      }
+
+      if (batchEnd < NUM_ACCOUNTS) await sleep(TX_DELAY_MS);
     }
 
-    console.log(`\nPhase 1 complete (${NUM_ACCOUNTS - p1Failures}/${NUM_ACCOUNTS} succeeded). Clearing nonce cache...`);
+    console.log(`Phase 1 done — ${NUM_ACCOUNTS - p1Failures}/${NUM_ACCOUNTS} succeeded.`);
+
+    // Verify all sub-wallets actually received funds before Phase 2.
+    // Low-fee Phase 1 txs can appear confirmed via API but still be dropped on-chain.
+    console.log(`\nVerifying sub-wallet balances…`);
+    let fundingGaps = 0;
+    const needed = returnAmount + TX_FEE;
+    await Promise.all(
+      Array.from({ length: NUM_ACCOUNTS }, async (_, idx) => {
+        const i = idx + 1;
+        const addr = getAddressFromPrivateKey(wallet.accounts[i].stxPrivateKey, TransactionVersion.Mainnet);
+        const bal  = await fetchBalance(addr);
+        if (bal < needed) {
+          console.error(`  ⚠ Account ${i} has ${bal} µSTX — below ${needed} µSTX needed. Phase 1 TX may not have landed.`);
+          fundingGaps++;
+        }
+      })
+    );
+    if (fundingGaps > 0) {
+      console.error(`\n  ${fundingGaps} wallets underfunded — re-run the script to retry Phase 1 for them.`);
+    } else {
+      console.log(`  All wallets funded ✓`);
+    }
+
+    // Clear sub-wallet nonce cache before Phase 2
     for (let i = 1; i <= NUM_ACCOUNTS; i++) {
-      const addr = getAddressFromPrivateKey(wallet.accounts[i].stxPrivateKey, TransactionVersion.Mainnet);
-      nonceCache.delete(addr);
+      nonceCache.delete(getAddressFromPrivateKey(wallet.accounts[i].stxPrivateKey, TransactionVersion.Mainnet));
     }
 
-    // Phase 2: Sub-wallets tip back to Account 0
-    console.log(`\nPhase 2 — sub-wallets returning ${returnAmount} µSTX to master...`);
+    // ── Phase 2: sub-wallets → master (fully parallel, wave-by-wave) ───────
+    // Each sub-wallet is a distinct sender — no chaining constraint between them.
+    // Fire P2_CONCURRENCY at once, wait for the wave, then fire the next wave.
+    console.log(`\nPhase 2 — ${NUM_ACCOUNTS} sub-wallets returning to master (concurrency=${P2_CONCURRENCY})…`);
     let p2Failures = 0;
-    for (let i = 1; i <= NUM_ACCOUNTS; i++) {
-      const subBalance = await fetchBalance(
-        getAddressFromPrivateKey(wallet.accounts[i].stxPrivateKey, TransactionVersion.Mainnet)
-      );
-      if (subBalance < returnAmount + TX_FEE) {
-        console.log(`  [C${cycle} P2 ${i}/${NUM_ACCOUNTS}] ⚠ Skipped — insufficient balance (${subBalance} µSTX)`);
-        p2Failures++;
-        continue;
+
+    for (let waveStart = 1; waveStart <= NUM_ACCOUNTS; waveStart += P2_CONCURRENCY) {
+      const waveEnd = Math.min(waveStart + P2_CONCURRENCY - 1, NUM_ACCOUNTS);
+      console.log(`  Wave ${waveStart}–${waveEnd}`);
+
+      const waveTasks = [];
+      for (let i = waveStart; i <= waveEnd; i++) {
+        const subKey     = wallet.accounts[i].stxPrivateKey;
+        const subAddress = getAddressFromPrivateKey(subKey, TransactionVersion.Mainnet);
+        waveTasks.push(
+          fetchBalance(subAddress).then(async (bal) => {
+            if (bal < returnAmount + TX_FEE) {
+              console.log(`  [P2 ${i}] ⚠ skipped — insufficient balance`);
+              return false;
+            }
+            return sendWithRetry(subKey, acc0Address, returnAmount, `[P2 ${i}]`);
+          })
+        );
       }
 
-      const ok = await sendWithRetry(
-        wallet.accounts[i].stxPrivateKey,
-        acc0Address,
-        returnAmount,
-        `[C${cycle} P2 ${i}/${NUM_ACCOUNTS}]`
-      );
-      if (!ok) {
-        p2Failures++;
-        console.error(`  ⚠ Phase 2 TX ${i} failed after retries — continuing`);
-      }
-      if (i < NUM_ACCOUNTS) await sleep(TX_DELAY_MS);
+      const results = await Promise.all(waveTasks);
+      p2Failures += results.filter((r) => !r).length;
     }
 
-    const totalSucceeded = (NUM_ACCOUNTS - p1Failures) + (NUM_ACCOUNTS - p2Failures);
-    console.log(`\nCycle ${cycle} complete — ${totalSucceeded}/${NUM_ACCOUNTS * 2} contract interactions succeeded.`);
+    const totalOk = (NUM_ACCOUNTS - p1Failures) + (NUM_ACCOUNTS - p2Failures);
+    console.log(`\nCycle ${cycle} done — ${totalOk}/${NUM_ACCOUNTS * 2} interactions succeeded.`);
     if (p1Failures + p2Failures > 0) {
-      console.log(`  Failures: ${p1Failures} in Phase 1, ${p2Failures} in Phase 2`);
+      console.log(`  Failures: P1=${p1Failures}, P2=${p2Failures}`);
     }
   }
 
-  const totalTx = CYCLES * NUM_ACCOUNTS * 2;
-  console.log(`\n${"━".repeat(55)}`);
-  console.log(`Done -- ${totalTx} total transactions`);
-  console.log(`Approx fees: ~${(totalTx * Number(TX_FEE) / 1_000_000).toFixed(4)} STX`);
-  console.log(`${"━".repeat(55)}\n`);
+  const totalTx      = CYCLES * NUM_ACCOUNTS * 2;
+  const p1FeeTotal   = CYCLES * NUM_ACCOUNTS * Number(FUND_FEE);
+  const p2FeeTotal   = CYCLES * NUM_ACCOUNTS * Number(TX_FEE);
+  const totalFeesStx = (p1FeeTotal + p2FeeTotal) / 1_000_000;
+  console.log(`\n${"━".repeat(60)}`);
+  console.log(`Done — ${totalTx} total TXs, ~${NUM_ACCOUNTS} DAU/run`);
+  console.log(`Fees burned: ~${totalFeesStx.toFixed(4)} STX (P1 ${(p1FeeTotal/1e6).toFixed(4)} + P2 ${(p2FeeTotal/1e6).toFixed(4)})`);
+  console.log(`${"━".repeat(60)}\n`);
 }
 
 run().catch(console.error);
