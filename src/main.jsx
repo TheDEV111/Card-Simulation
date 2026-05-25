@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import "./index.css";
 
+import { PWARoot }         from "./context/PWARoot.jsx";
 import { WalletProvider }  from "./context/WalletContext";
 import { ToastProvider }   from "./context/ToastContext";
 import AppLayout           from "./components/layout/AppLayout";
@@ -22,6 +23,7 @@ import { ROUTES }       from "./utils/routes";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
+    <PWARoot>
     <WalletProvider>
       <ToastProvider>
         <BrowserRouter>
@@ -43,5 +45,6 @@ createRoot(document.getElementById("root")).render(
         </BrowserRouter>
       </ToastProvider>
     </WalletProvider>
+    </PWARoot>
   </StrictMode>
 );
