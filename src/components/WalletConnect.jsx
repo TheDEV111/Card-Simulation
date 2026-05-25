@@ -6,17 +6,26 @@ const APP_DETAILS = {
   icon: window.location.origin + "/favicon.ico",
 };
 
-const appConfig = new AppConfig(["store_write", "publish_data"]);
+const appConfig   = new AppConfig(["store_write", "publish_data"]);
 const userSession = new UserSession({ appConfig });
 
 function getSafeSession() {
   try {
     userSession.isUserSignedIn();
   } catch {
-    // Stale or malformed session data — clear it so the modal can proceed
     userSession.store.deleteSessionData();
   }
   return userSession;
+}
+
+function WalletIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <rect x="1" y="3" width="12" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M1 6h12" stroke="currentColor" strokeWidth="1.3"/>
+      <circle cx="10" cy="9" r="1" fill="currentColor"/>
+    </svg>
+  );
 }
 
 export default function WalletConnect({ address, onConnect, onDisconnect }) {
@@ -35,14 +44,14 @@ export default function WalletConnect({ address, onConnect, onDisconnect }) {
 
   if (address) {
     return (
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-overlay border border-white/10">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-          <span className="text-sm text-white/70 font-mono">
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-overlay border border-white/8">
+          <span className="w-1.5 h-1.5 rounded-full bg-stacks shrink-0" />
+          <span className="text-xs text-white/60 font-mono">
             {address.slice(0, 6)}…{address.slice(-4)}
           </span>
         </div>
-        <button className="btn-ghost" onClick={onDisconnect}>
+        <button className="btn-ghost py-1.5 text-xs" onClick={onDisconnect}>
           Disconnect
         </button>
       </div>
@@ -50,8 +59,12 @@ export default function WalletConnect({ address, onConnect, onDisconnect }) {
   }
 
   return (
-    <button className="btn-ghost" onClick={handleConnect}>
-      Connect Wallet
+    <button
+      className="flex items-center gap-2 px-4 py-2 rounded-xl border border-stacks/30 text-stacks text-sm font-medium hover:bg-stacks/8 hover:border-stacks/50 transition-all duration-150"
+      onClick={handleConnect}
+    >
+      <WalletIcon />
+      Connect
     </button>
   );
 }

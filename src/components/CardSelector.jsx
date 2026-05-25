@@ -1,44 +1,56 @@
 const CARDS = [
-  { id: 1, suit: "♠", label: "Spades" },
-  { id: 2, suit: "♥", label: "Hearts" },
-  { id: 3, suit: "♦", label: "Diamonds" },
+  { id: 1, suit: "♠", label: "Spades",   color: "text-white" },
+  { id: 2, suit: "♥", label: "Hearts",   color: "text-rose-400" },
+  { id: 3, suit: "♦", label: "Diamonds", color: "text-gold" },
 ];
+
+function CornerIndex({ suit, color, flip }) {
+  return (
+    <span
+      className={`absolute text-[10px] font-bold leading-none ${color} ${
+        flip ? "bottom-2 right-2.5 rotate-180" : "top-2 left-2.5"
+      }`}
+    >
+      {suit}
+    </span>
+  );
+}
 
 export default function CardSelector({ selected, onChange, disabled }) {
   return (
     <div>
-      <p className="text-xs font-medium text-white/40 uppercase tracking-widest mb-3">
-        Pick a card
-      </p>
+      <p className="label-caps mb-3">Pick a card</p>
       <div className="grid grid-cols-3 gap-3">
         {CARDS.map((card) => {
           const isSelected = selected === card.id;
-          const isRed = card.id !== 1;
           return (
             <button
               key={card.id}
               disabled={disabled}
               onClick={() => onChange(card.id)}
               className={[
-                "flex flex-col items-center justify-center gap-1.5 py-6 rounded-2xl",
-                "transition-all duration-150 cursor-pointer select-none",
-                "disabled:opacity-40 disabled:cursor-not-allowed",
-                isSelected
-                  ? "shadow-card-selected bg-surface-overlay"
-                  : "shadow-card bg-surface-raised hover:shadow-card-hover hover:-translate-y-0.5",
+                "playing-card py-8",
+                isSelected ? "selected" : "",
+                "disabled:opacity-35 disabled:cursor-not-allowed",
               ].join(" ")}
+              aria-pressed={isSelected}
+              aria-label={`${card.label} ${isSelected ? "(selected)" : ""}`}
             >
+              <CornerIndex suit={card.suit} color={card.color} flip={false} />
+
               <span
                 className={[
-                  "text-4xl leading-none",
-                  isRed ? "text-rose-400" : "text-white",
-                  isSelected ? "scale-110" : "",
-                  "transition-transform duration-150",
+                  "text-4xl leading-none transition-transform duration-200",
+                  card.color,
+                  isSelected ? "scale-110" : "scale-100",
                 ].join(" ")}
               >
                 {card.suit}
               </span>
-              <span className="text-xs font-medium text-white/40">
+
+              <CornerIndex suit={card.suit} color={card.color} flip />
+
+              <span className="mt-2 text-2xs font-medium text-white/30 tracking-wide uppercase">
                 {card.label}
               </span>
             </button>

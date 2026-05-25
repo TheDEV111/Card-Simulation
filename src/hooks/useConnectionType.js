@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 
-function getConnectionInfo() {
-  const conn = navigator.connection ?? navigator.mozConnection ?? navigator.webkitConnection;
-  if (!conn) return null;
+function getConnection() {
+  return navigator.connection ?? navigator.mozConnection ?? navigator.webkitConnection ?? null;
+}
+
+function snapshot(conn) {
+  if (!conn) return { effectiveType: null, downlink: null, rtt: null, saveData: false };
   return {
-    type: conn.type ?? null,
     effectiveType: conn.effectiveType ?? null,
     downlink: conn.downlink ?? null,
     rtt: conn.rtt ?? null,
@@ -13,16 +15,15 @@ function getConnectionInfo() {
 }
 
 export function useConnectionType() {
-  const supported = typeof navigator !== "undefined" && "connection" in navigator;
-  const [info, setInfo] = useState(() => (supported ? getConnectionInfo() : null));
+  const [state, setState] = useState(() => snapshot(getConnection()));
 
   useEffect(() => {
-    if (!supported) return;
-    const conn = navigator.connection ?? navigator.mozConnection ?? navigator.webkitConnection;
-    const update = () => setInfo(getConnectionInfo());
-    conn?.addEventListener("change", update);
-    return () => conn?.removeEventListener("change", update);
-  }, [supported]);
+    const conn = getConnection();
+    if (!conn) return;
+    const update = () => setState(snapshot(conn));
+    conn.addEventListener("change", update);
+    return () => conn.removeEventListener("change", update);
+  }, []);
 
-  return { supported, ...info };
+  return state;
 }

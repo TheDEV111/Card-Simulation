@@ -19,60 +19,60 @@
     @apply outline outline-2 outline-offset-2 outline-gold;
   }
 
-  ::-webkit-scrollbar        { width: 6px; height: 6px; }
+  ::-webkit-scrollbar        { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track  { background: transparent; }
   ::-webkit-scrollbar-thumb  { @apply bg-white/10 rounded-full; }
   ::-webkit-scrollbar-thumb:hover { @apply bg-white/20; }
 
-  ::selection { background: rgba(212,168,75,0.25); color: #fff; }
+  ::selection { background: oklch(0.72 0.12 76 / 0.22); color: #fff; }
 }
 
 @layer components {
   /* --- Buttons --- */
   .btn-primary {
-    @apply w-full py-4 px-6 rounded-xl font-semibold text-base
+    @apply w-full py-3.5 px-6 rounded-xl font-semibold text-sm
       bg-gold text-surface transition-all duration-150
       hover:bg-gold-light active:scale-[0.98]
       disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100;
     font-family: "Cinzel", serif;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
   }
 
   .btn-secondary {
     @apply px-5 py-2.5 rounded-xl font-medium text-sm
-      bg-surface-overlay border border-white/10 text-white/80
-      hover:border-gold/40 hover:text-white transition-all duration-150
+      bg-surface-overlay border border-white/10 text-white/75
+      hover:border-gold/30 hover:text-white transition-all duration-150
       disabled:opacity-40 disabled:cursor-not-allowed;
   }
 
   .btn-ghost {
     @apply px-4 py-2 rounded-lg font-medium text-sm
-      border border-white/10 text-white/60
-      hover:border-gold/40 hover:text-white transition-all duration-150;
+      border border-white/10 text-white/50
+      hover:border-white/20 hover:text-white/75 transition-all duration-150;
   }
 
   .btn-danger {
     @apply px-4 py-2 rounded-lg font-medium text-sm
-      border border-loss/30 text-loss/80
-      hover:border-loss/60 hover:text-loss transition-all duration-150;
+      border border-loss/25 text-loss/70
+      hover:border-loss/50 hover:text-loss transition-all duration-150;
   }
 
   /* --- Inputs --- */
   .input-field {
     @apply w-full bg-surface-overlay border border-white/10 rounded-xl
-      px-4 py-3 text-white placeholder-white/30 text-sm
-      focus:border-gold/60 focus:ring-0 outline-none transition-colors;
+      px-4 py-3 text-white placeholder-white/25 text-sm
+      focus:border-gold/50 focus:ring-0 outline-none transition-colors;
   }
 
   .select-field {
     @apply input-field appearance-none cursor-pointer;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23ffffff40' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23ffffff30' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 14px center;
     padding-right: 36px;
   }
 
-  /* --- Cards --- */
+  /* --- Panels --- */
   .panel {
     @apply bg-surface-raised rounded-2xl border border-white/5;
   }
@@ -94,7 +94,7 @@
     background: linear-gradient(
       90deg,
       transparent 0%,
-      rgba(255,255,255,0.04) 50%,
+      oklch(1 0 0 / 0.04) 50%,
       transparent 100%
     );
     background-size: 200% 100%;
@@ -103,7 +103,7 @@
 
   /* --- Labels --- */
   .label-caps {
-    @apply text-2xs uppercase tracking-widest text-white/40 font-medium;
+    @apply text-2xs uppercase tracking-widest text-white/30 font-medium;
   }
 
   /* --- Stat numbers --- */
@@ -112,10 +112,10 @@
     font-family: "Cinzel", serif;
   }
 
-  /* --- Table --- */
+  /* --- Table rows --- */
   .table-row {
     @apply border-b border-white/5 last:border-0
-      hover:bg-surface-overlay/60 transition-colors duration-100;
+      hover:bg-surface-overlay/50 transition-colors duration-100;
   }
 
   /* --- Landing sections --- */
@@ -139,12 +139,43 @@
                 transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  /* --- Gold shimmer --- */
-  .gold-shimmer {
-    background: linear-gradient(90deg, #d4a84b 0%, #e8c068 50%, #d4a84b 100%);
-    background-size: 200% 100%;
-    animation: shimmer 2.4s infinite;
-    -webkit-background-clip: text;
-    background-clip: text;
+  /* --- Playing card --- */
+  .playing-card {
+    @apply relative flex flex-col items-center justify-center
+      bg-surface-overlay rounded-2xl
+      transition-all duration-200 cursor-pointer select-none
+      disabled:opacity-40 disabled:cursor-not-allowed;
+    box-shadow: 0 0 0 1px oklch(1 0 0 / 0.06), 0 4px 16px oklch(0 0 0 / 0.5);
+    transform-style: preserve-3d;
+  }
+
+  .playing-card:not(:disabled):hover {
+    box-shadow: 0 0 0 1px oklch(0.72 0.12 76 / 0.35), 0 8px 24px oklch(0 0 0 / 0.6);
+    transform: translateY(-3px) rotate(-1deg);
+  }
+
+  .playing-card.selected {
+    box-shadow:
+      0 0 0 2px oklch(0.72 0.12 76),
+      0 10px 32px oklch(0.72 0.12 76 / 0.18);
+    transform: translateY(-4px);
+  }
+
+  .playing-card.selected:hover {
+    transform: translateY(-5px) rotate(-0.5deg);
+  }
+
+  /* --- ScaleOnHover --- */
+  .scale-on-hover:hover {
+    transform: scale(var(--hover-scale, 1.03));
+  }
+
+  /* --- Nav item active indicator --- */
+  .nav-active-dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: oklch(0.72 0.12 76);
+    flex-shrink: 0;
   }
 }
