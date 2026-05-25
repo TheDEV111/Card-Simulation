@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import NavItem from "./NavItem";
 import { ROUTES } from "../../utils/routes";
+import { NotificationBell } from "../pwa/NotificationBell.jsx";
+import { NotificationPrompt } from "../pwa/NotificationPrompt.jsx";
 
 const ALL_NAV = [
   { to: ROUTES.HOME,         label: "Home" },
@@ -43,6 +45,7 @@ function StacksMark() {
 
 export default function MobileNav() {
   const [open, setOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
 
   return (
     <>
@@ -51,14 +54,26 @@ export default function MobileNav() {
           <span className="text-stacks"><StacksMark /></span>
           <span className="font-semibold text-sm text-white" style={{ fontFamily: "Cinzel, serif" }}>Card Game</span>
         </Link>
-        <button
-          onClick={() => setOpen(true)}
-          className="w-9 h-9 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-surface-overlay transition-colors"
-          aria-label="Open menu"
-        >
-          <HamburgerIcon />
-        </button>
+        <div className="flex items-center gap-1">
+          <NotificationBell onClick={() => setNotifOpen((v) => !v)} />
+          <button
+            onClick={() => setOpen(true)}
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-surface-overlay transition-colors"
+            aria-label="Open menu"
+          >
+            <HamburgerIcon />
+          </button>
+        </div>
       </header>
+
+      {notifOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
+          <div className="fixed top-14 right-4 z-50 w-80">
+            <NotificationPrompt onSubscribed={() => setNotifOpen(false)} onDismiss={() => setNotifOpen(false)} />
+          </div>
+        </>
+      )}
 
       {open && (
         <>

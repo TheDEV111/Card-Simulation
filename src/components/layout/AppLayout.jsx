@@ -5,6 +5,11 @@ import MobileNav from "./MobileNav";
 import Toasts from "../ui/Toast";
 import Footer from "../Footer";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { PWAInstallPrompt } from "../pwa/PWAInstallPrompt.jsx";
+import { UpdateBanner } from "../pwa/UpdateBanner.jsx";
+import { UpdateToast } from "../pwa/UpdateToast.jsx";
+import { PWADrawer } from "../pwa/PWADrawer.jsx";
+import { PWAErrorBoundary } from "../pwa/PWAErrorBoundary.jsx";
 
 export default function AppLayout() {
   const isMobile = useMediaQuery("(max-width: 768px)");
@@ -16,6 +21,7 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen flex">
+      <UpdateBanner />
       {isMobile ? (
         <div className="flex-1 flex flex-col">
           <MobileNav />
@@ -36,6 +42,11 @@ export default function AppLayout() {
         </>
       )}
       <Toasts />
+      <PWAInstallPrompt />
+      <UpdateToast />
+      <PWAErrorBoundary>
+        <PWADrawer />
+      </PWAErrorBoundary>
     </div>
   );
 }

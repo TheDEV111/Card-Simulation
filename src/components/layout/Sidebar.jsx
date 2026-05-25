@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import NavItem from "./NavItem";
 import SidebarCTA from "../ui/SidebarCTA";
 import { ROUTES } from "../../utils/routes";
 import { cn } from "../../utils/cn";
+import { NotificationBell } from "../pwa/NotificationBell.jsx";
+import { NotificationPrompt } from "../pwa/NotificationPrompt.jsx";
 
 const NAV = [
   { to: ROUTES.HOME,         label: "Home" },
@@ -31,25 +34,41 @@ function StacksMark() {
 }
 
 export default function Sidebar({ className }) {
+  const [notifOpen, setNotifOpen] = useState(false);
+
   return (
-    <aside className={cn("flex flex-col w-56 shrink-0 h-screen sticky top-0 border-r border-white/5 bg-surface p-4", className)}>
-      <Link to={ROUTES.HOME} className="flex items-center gap-2.5 px-3 py-2 mb-6">
-        <span className="text-stacks flex items-center">
-          <StacksMark />
-        </span>
-        <span className="font-semibold text-white text-sm tracking-wide" style={{ fontFamily: "Cinzel, serif" }}>
-          Card Game
-        </span>
-      </Link>
+    <>
+      <aside className={cn("flex flex-col w-56 shrink-0 h-screen sticky top-0 border-r border-white/5 bg-surface p-4", className)}>
+        <Link to={ROUTES.HOME} className="flex items-center gap-2.5 px-3 py-2 mb-6">
+          <span className="text-stacks flex items-center">
+            <StacksMark />
+          </span>
+          <span className="font-semibold text-white text-sm tracking-wide" style={{ fontFamily: "Cinzel, serif" }}>
+            Card Game
+          </span>
+        </Link>
 
-      <nav className="flex-1 space-y-0.5">
-        {NAV.map((item) => <NavItem key={item.to} {...item} />)}
-      </nav>
+        <nav className="flex-1 space-y-0.5">
+          {NAV.map((item) => <NavItem key={item.to} {...item} />)}
+        </nav>
 
-      <SidebarCTA />
-      <div className="space-y-0.5 pt-3 border-t border-white/5">
-        {NAV_BOTTOM.map((item) => <NavItem key={item.to} {...item} />)}
-      </div>
-    </aside>
+        <SidebarCTA />
+        <div className="space-y-0.5 pt-3 border-t border-white/5">
+          {NAV_BOTTOM.map((item) => <NavItem key={item.to} {...item} />)}
+          <div className="px-3 py-1">
+            <NotificationBell onClick={() => setNotifOpen((v) => !v)} />
+          </div>
+        </div>
+      </aside>
+
+      {notifOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
+          <div className="fixed bottom-16 left-60 z-50 w-80">
+            <NotificationPrompt onSubscribed={() => setNotifOpen(false)} onDismiss={() => setNotifOpen(false)} />
+          </div>
+        </>
+      )}
+    </>
   );
 }
