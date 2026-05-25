@@ -22,5 +22,5 @@ export function useScrollReveal({ threshold = 0.15, once = true } = {}) {
     return () => observer.disconnect();
   }, [threshold, once]);
 
-  return { ref, revealed };
+  return [ref, revealed];
 }

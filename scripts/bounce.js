@@ -51,7 +51,7 @@ const distributeAmount = returnAmount + TX_FEE + 500n; // 1501 µSTX (funds Phas
 // Each sub-wallet = 1 unique DAU. Raise NUM_ACCOUNTS to increase daily DAU.
 // Cost per run ≈ NUM_ACCOUNTS * (distributeAmount + FUND_FEE) / 1_000_000 STX
 //   500 accounts ≈ 0.65 STX/run  |  1000 accounts ≈ 1.30 STX/run
-const NUM_ACCOUNTS = 1000;
+const NUM_ACCOUNTS = 800;
 const CYCLES       = 1;
 
 // Phase 1 (master → subs) is batched to stay under Stacks' ~25-tx mempool limit per account.
@@ -271,26 +271,45 @@ async function run() {
 
     console.log(`Phase 1 done — ${NUM_ACCOUNTS - p1Failures}/${NUM_ACCOUNTS} succeeded.`);
 
+    // Wait for the balance indexer to catch up with the confirmed block.
+    // tx_status "success" and /address/stx balance are on separate indexer paths —
+    // the balance endpoint can lag 15-45s behind the tx endpoint after a block lands.
+    console.log(`\nWaiting 60s for balance indexer to settle…`);
+    await sleep(60_000);
+
     // Verify all sub-wallets actually received funds before Phase 2.
-    // Low-fee Phase 1 txs can appear confirmed via API but still be dropped on-chain.
-    console.log(`\nVerifying sub-wallet balances…`);
-    let fundingGaps = 0;
+    // Re-check in a retry loop in case the indexer is still catching up.
     const needed = returnAmount + TX_FEE;
-    await Promise.all(
-      Array.from({ length: NUM_ACCOUNTS }, async (_, idx) => {
-        const i = idx + 1;
-        const addr = getAddressFromPrivateKey(wallet.accounts[i].stxPrivateKey, TransactionVersion.Mainnet);
-        const bal  = await fetchBalance(addr);
-        if (bal < needed) {
-          console.error(`  ⚠ Account ${i} has ${bal} µSTX — below ${needed} µSTX needed. Phase 1 TX may not have landed.`);
-          fundingGaps++;
-        }
-      })
-    );
+    let fundingGaps = 0;
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      fundingGaps = 0;
+      const checks = await Promise.all(
+        Array.from({ length: NUM_ACCOUNTS }, async (_, idx) => {
+          const i    = idx + 1;
+          const addr = getAddressFromPrivateKey(wallet.accounts[i].stxPrivateKey, TransactionVersion.Mainnet);
+          const bal  = await fetchBalance(addr);
+          return bal >= needed;
+        })
+      );
+      fundingGaps = checks.filter((ok) => !ok).length;
+
+      if (fundingGaps === 0) {
+        console.log(`  All ${NUM_ACCOUNTS} wallets funded ✓`);
+        break;
+      }
+
+      console.error(`  ${fundingGaps} wallets still underfunded (attempt ${attempt}/3)`);
+      if (attempt < 3) {
+        console.log(`  Waiting another 30s…`);
+        await sleep(30_000);
+      }
+    }
+
     if (fundingGaps > 0) {
-      console.error(`\n  ${fundingGaps} wallets underfunded — re-run the script to retry Phase 1 for them.`);
-    } else {
-      console.log(`  All wallets funded ✓`);
+      console.error(`\n  ✗ ${fundingGaps} wallets underfunded after retries — Phase 1 fees may be too low.`);
+      console.error(`  Skipping Phase 2 to avoid wasted gas. Raise FUND_FEE and re-run.`);
+      continue; // skip Phase 2 for this cycle
     }
 
     // Clear sub-wallet nonce cache before Phase 2
